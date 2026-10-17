@@ -176,7 +176,7 @@ static void input_ui(bool refresh) {
         }
         [rows addObject:row];
     }
-    [[NSJSONSerialization dataWithJSONObject:rows options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-input-ui.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:rows options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-input-ui.json") atomically:YES];
     NSMutableArray *cameras=[NSMutableArray array];
     const void *allCameras=class_get_method_from_name(find_class("UnityEngine","Camera"),"get_allCameras",0);
     void *cameraArray=allCameras ? runtime_invoke(allCameras,NULL,NULL,&exception) : NULL;
@@ -188,7 +188,7 @@ static void input_ui(bool refresh) {
         }
         [cameras addObject:entry];
     }
-    [[NSJSONSerialization dataWithJSONObject:cameras options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-input-ui-cameras.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:cameras options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-input-ui-cameras.json") atomically:YES];
     fprintf(output,"input_ui=complete helpers=%lu refreshed=%d\n",(unsigned long)rows.count,refresh);
 }
 
@@ -358,7 +358,7 @@ static void input_buttons(bool enabled) {
     }
     NSMutableArray *rows=[NSMutableArray array];
     if(enabled)for(int i=0;i<2;i++)for(int down=0;down<2;down++)input_button_actions_for(i,down,false,rows);
-    [[NSJSONSerialization dataWithJSONObject:rows options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-input-button-bindings.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:rows options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-input-button-bindings.json") atomically:YES];
     fprintf(output,"input_buttons=%s bindings=%lu\n",enabled ? "enabled" : "disabled",(unsigned long)rows.count);
 }
 
@@ -401,7 +401,7 @@ static void input_hud(void) {
         }
     }
     NSDictionary *result=@{@"assets":assets,@"components":components};
-    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-input-hud.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-input-hud.json") atomically:YES];
     fprintf(output,"input_hud=complete components=%lu\n",(unsigned long)components.count);
 }
 
@@ -776,15 +776,20 @@ static void dump_input(void) {
         void *real=field_reference(manager,"m_realCursorManager"),*description=invoke(real,"DumpState",0,NULL,&ok);
         if(ok && description)result[@"realCursorRequests"]=managed_string(description);
     }
-    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-input.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-input.json") atomically:YES];
     fprintf(output,"input_dump=complete\n");
+}
+
+static bool input_device_switch_pending(void) {
+    bool ok=false;void *value=invoke(input_manager(),"get_inChangingInputDevice",0,NULL,&ok);
+    return ok && value && *(bool *)object_unbox(value);
 }
 
 static void select_input_mode(NSString *mode) {
     void *device=find_class("Beyond","DeviceInfo"),*manager=input_manager();
     if(!manager){fprintf(output,"input_result=manager_unavailable\n");return;}
-    bool rebuild=[mode isEqual:@"keyboard-ui"] || [mode isEqual:@"touch"];
-    const void *method=class_get_method_from_name(object_get_class(manager),rebuild ? "_TryChangeInputDeviceType" : "ChangeInputTypeAndSyncState",1);
+    // Every device transition must let the game unload/rebuild its UI together.
+    const void *method=class_get_method_from_name(object_get_class(manager),"_TryChangeInputDeviceType",1);
     void *(*class_from_type_fn)(const void *)=dlsym(RTLD_DEFAULT,"il2cpp_class_from_type");
     if(!method || !class_from_type_fn){fprintf(output,"input_result=method_unavailable\n");return;}
     void *current=input_static(device,"get_inputType",0,NULL);
@@ -797,6 +802,12 @@ static void select_input_mode(NSString *mode) {
         void *field=name && enum_class ? class_get_field_from_name(enum_class,name) : NULL;
         if(!field){fprintf(output,"input_result=enum_unavailable\n");return;}
         field_static_get_value(field,&mode_value);
+    }
+    if(input_device_switch_pending()){
+        fprintf(output,"input_result=mode_pending requested=%d\n",mode_value);dump_input();return;
+    }
+    if(*(int *)object_unbox(current)==mode_value){
+        fprintf(output,"input_result=mode_verified requested=%d actual=%d\n",mode_value,mode_value);dump_input();return;
     }
     void *args[]={&mode_value},*exception=NULL;
     runtime_invoke(method,manager,args,&exception);

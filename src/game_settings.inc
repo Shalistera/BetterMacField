@@ -301,6 +301,6 @@ static void game_settings(NSDictionary *command) {
     result[@"rules"]=dictionary_entries(field_reference(context,"m_values"));
     void *resolutions=input_static(settings,"get_availableScreenResolutionList",0,NULL);
     result[@"resolutions"]=render_value(resolutions,0);
-    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-game-settings.json" atomically:YES];
+    [[NSJSONSerialization dataWithJSONObject:result options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-game-settings.json") atomically:YES];
     fprintf(output,"game_settings=complete items=%lu\n",(unsigned long)rows.count);
 }

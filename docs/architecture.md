@@ -1,6 +1,6 @@
 # 架构与版本适配
 
-`bettermacfield.py` 负责精确客户端校验、本地编译、单进程启动和 PlayCover 设置恢复。客户端资源与模型工具不参与构建。`src/core.m` 将以下组件组成一个 arm64 动态库：
+`bettermacfield.py` 负责精确客户端校验、本地编译、单进程启动和 PlayCover 设置恢复。`launcher/main.m` 提供相同客户端身份校验和设置恢复的原生启动入口，`build_release.py` 把本项目动态库与客户端指纹打包；玩家使用打包版时无需编译环境。两种入口共用动态库内的设置初始化。客户端资源与模型工具不参与构建。`src/core.m` 将以下组件组成一个 arm64 动态库：
 
 - `engine.inc`：IL2CPP API 绑定、原生参数系统与角色自阴影 Volume override。
 - `input_*.inc`、`keyboard_input.inc`、HUD 与菜单模块：AppKit 事件接入现有游戏输入，沿用原始技能和交互回调。SDK/网页覆盖层出现时释放捕获。
@@ -19,7 +19,7 @@
 
 ## 客户端更新
 
-当前公开版本只接受 README 标注的国际服 1.6.3 构建。更新时依次重新核对：
+当前公开版本只接受 README 标注的国际服与国服 1.6.3 构建。国服使用独立 UnityFramework 指纹、输入 icall 包装器、C++ 渲染入口和 GBuffer 配置检查。两服使用各自容器的 `Data/tmp/BetterMacField`，避免受沙盒限制时公共 `/private/tmp` 写入失败。更新时依次重新核对：
 
 1. UnityFramework 和 global-metadata 的完整身份；禁止只改哈希强行通过。
 2. IL2CPP 类型、参数类型、布局与现有回调的含义。

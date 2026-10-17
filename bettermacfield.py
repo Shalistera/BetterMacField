@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -15,6 +16,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent
 DEFAULT_APP = Path.home() / 'Library/Containers/io.playcover.PlayCover/Applications/com.gryphline.endfield.ios.app'
+CLIENTS = {'global': 'com.gryphline.endfield.ios', 'cn': 'com.hypergryph.endfield'}
 BUILD = ROOT / 'build'
 LIBRARY = BUILD / 'libBetterMacField.dylib'
 STATE = Path.home() / 'Library/Application Support/BetterMacField'
@@ -26,6 +28,9 @@ EXPECTED = {
     'Frameworks/UnityFramework.framework/UnityFramework': '767616ee9093e7ce8a588f30ed4beef3929d4adb0fcfb8ca100e7b8a77d4cb13',
     'Data/Managed/Metadata/global-metadata.dat': '701d8556af6268bcb489bb7460e220f04b779a4002a9c8bf28de839a33ba5409',
 }
+CN_EXPECTED = dict(EXPECTED, **{
+    'Frameworks/UnityFramework.framework/UnityFramework': '3d0ecbe4c85d8be449c4bfac3503f46edf24dabd2f10270539d354bd8ac132e2',
+})
 DISPLAY_SETTINGS = dict(customScaler=2.0, resolution=6, resizableAspectRatioWidth=16,
                         resizableAspectRatioHeight=9, keymapping=False)
 
@@ -42,15 +47,28 @@ def validate(app):
     if platform.system() != 'Darwin' or platform.machine() != 'arm64':
         raise RuntimeError('This release requires an Apple Silicon Mac and native arm64 Python.')
     info = plistlib.loads((app/'Info.plist').read_bytes())
-    if info.get('CFBundleIdentifier') != 'com.gryphline.endfield.ios' or info.get('CFBundleShortVersionString') != '1.6.3':
-        raise RuntimeError('Supported client: com.gryphline.endfield.ios 1.6.3 only.')
-    for relative, expected in EXPECTED.items():
+    bundle = info.get('CFBundleIdentifier')
+    if bundle not in CLIENTS.values() or info.get('CFBundleShortVersionString') != '1.6.3':
+        raise RuntimeError('Supported clients: global/CN iOS 1.6.3 only.')
+    for relative, expected in (CN_EXPECTED if bundle == CLIENTS['cn'] else EXPECTED).items():
         if sha256(app/relative) != expected:
             raise RuntimeError(f'Client build identity changed: {relative}. Update support before launching.')
     dependencies = subprocess.check_output(['xcrun', 'otool', '-L', str(app/'Endfield')], text=True)
     if 'PlayTools.framework/PlayTools' not in dependencies:
         raise RuntimeError('Install this client through PlayCover with PlayTools first.')
     return info
+
+
+def configure_runtime(bundle):
+    global LOG, COMMAND, STATUS, RESTORE
+    if bundle not in CLIENTS.values():
+        raise RuntimeError('Unknown client bundle identifier.')
+    runtime = Path.home() / 'Library/Containers' / bundle / 'Data/tmp/BetterMacField'
+    LOG = runtime/'bettermacfield-runtime.log'
+    COMMAND = runtime/'bettermacfield-command.json'
+    STATUS = runtime/'bettermacfield-status.json'
+    RESTORE = STATE/('playcover-settings-cn.json' if bundle == CLIENTS['cn'] else 'playcover-settings.json')
+    return runtime
 
 
 def build():
@@ -137,21 +155,25 @@ def command(payload, timeout=15):
 
 
 def launch(app, restart):
-    validate(app)
+    info = validate(app)
+    runtime = configure_runtime(info['CFBundleIdentifier'])
     if running(app) and not restart:
         raise RuntimeError('Game is running. Close it or use launch --restart.')
     build()
     stop(app)
     apply_display(app)
+    runtime.mkdir(parents=True, exist_ok=True)
+    loaded_library = runtime/LIBRARY.name
+    shutil.copy2(LIBRARY, loaded_library)
     COMMAND.unlink(missing_ok=True);STATUS.unlink(missing_ok=True)
     previous = LOG.stat().st_mtime_ns if LOG.exists() else 0
-    subprocess.run(['open', '-n', '--env', f'DYLD_INSERT_LIBRARIES={LIBRARY}',
+    subprocess.run(['open', '-n', '--env', f'DYLD_INSERT_LIBRARIES={loaded_library}',
+                    '--env', f'BMF_RUNTIME_DIR={runtime}',
                     '--env', 'MTL_HUD_ENABLED=1', '--env', 'MTL_HUD_DISABLE_MENU_BAR=0',
                     str(app), '--args', '-MetalForceHudEnabled', 'YES'], check=True)
     deadline = time.monotonic()+150
     while time.monotonic() < deadline:
         if LOG.exists() and LOG.stat().st_mtime_ns != previous and 'core=ready' in LOG.read_text():
-            command(dict(op='settings', components=True, reveal=True, resolutionBridge=True))
             print('BetterMacField ready. Enter the scene to use the graphics menu.');return
         time.sleep(.5)
     raise RuntimeError(f'Runtime not ready; inspect {LOG}.')
@@ -159,13 +181,17 @@ def launch(app, restart):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--app', type=Path, default=DEFAULT_APP, help='Exact PlayCover app bundle')
+    parser.add_argument('--app', type=Path, help='Exact PlayCover app bundle')
+    parser.add_argument('--region', choices=tuple(CLIENTS), default='global')
     sub = parser.add_subparsers(dest='action', required=True)
     sub.add_parser('check');sub.add_parser('build');sub.add_parser('status')
     sub.add_parser('restore-settings', help='Restore only settings changed by this launcher')
     sub.add_parser('launch').add_argument('--restart', action='store_true')
-    args = parser.parse_args();app = args.app.expanduser().resolve()
+    args = parser.parse_args()
+    app = (args.app or DEFAULT_APP.with_name(CLIENTS[args.region]+'.app')).expanduser().resolve()
     try:
+        bundle = plistlib.loads((app/'Info.plist').read_bytes()).get('CFBundleIdentifier') if (app/'Info.plist').exists() else CLIENTS[args.region]
+        configure_runtime(bundle)
         if args.action == 'check':
             validate(app);print('Supported 1.6.3 client and PlayTools verified.')
         elif args.action == 'build':build()

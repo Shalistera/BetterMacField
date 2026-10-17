@@ -80,7 +80,7 @@ static void scene_lod_control(NSDictionary *command) {
                            @"result":result,@"effective":scene_lod_values(),
                            @"savedProfile":[NSUserDefaults.standardUserDefaults stringForKey:scene_lod_saved_key] ?: @"restore"};
     [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil]
-        writeToFile:@"/private/tmp/bettermacfield-scene-lod.json" atomically:YES];
+        writeToFile:runtime_path(@"bettermacfield-scene-lod.json") atomically:YES];
     fprintf(output,"scene_lod=%s profile=%s\n",result.UTF8String,[state[@"profile"] UTF8String]);
 }
 

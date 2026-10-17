@@ -29,7 +29,7 @@ static void input_auto_window_update(void) {
 }
 
 static bool input_auto_activate(void) {
-    if(input_native_overlay_visible())return false;
+    if(input_native_overlay_visible() || input_device_switch_pending())return false;
     void *mode=input_static(find_class("Beyond","DeviceInfo"),"get_usingKeyboard",0,NULL);
     bool keyboard=mode && *(bool *)object_unbox(mode);
     if(keyboard && input_capture_timer && input_mouse_bridge_to_camera && input_mouse_bridge_enabled &&
@@ -40,6 +40,7 @@ static bool input_auto_activate(void) {
     input_tune(@{@"bindings":@YES,@"controller":@NO});
     // Restoring a lost bridge must not recreate an already selected keyboard HUD.
     if(!keyboard)select_input_mode(@"keyboard-ui");
+    if(input_device_switch_pending())return false;
     mode=input_static(find_class("Beyond","DeviceInfo"),"get_usingKeyboard",0,NULL);
     if(!mode || !*(bool *)object_unbox(mode))return false;
     input_capture(true);input_bridge(true,true);input_move(true);input_buttons(true);

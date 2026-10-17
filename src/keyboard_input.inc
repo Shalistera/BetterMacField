@@ -51,12 +51,17 @@ static bool input_keyboard_escape_start(bool enabled) {
         {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb0037e14,0xf9426281,0xb50000c1,0xd0026300,0x91319000,0x9427ce7f,0xaa0003e1,0xf9026280,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020},
         {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb0037e14,0xf9426a81,0xb50000c1,0xd0026300,0x91331400,0x9427ce5f,0xaa0003e1,0xf9026a80,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020},
         {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb0037e14,0xf9427281,0xb50000c1,0xd0026300,0x9134a800,0x9427ce3f,0xaa0003e1,0xf9027280,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020}};
+    // CN 1.6.3, verified metadata methods and complete wrapper bodies.
+    const uint32_t expected_cn_1_6_3[3][16]={
+        {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb003a0f4,0xf9450281,0xb50000c1,0x90028100,0x9126d000,0x9427d2de,0xaa0003e1,0xf9050280,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020},
+        {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb003a0f4,0xf9450a81,0xb50000c1,0x90028100,0x91285400,0x9427d2be,0xaa0003e1,0xf9050a80,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020},
+        {0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb003a0f4,0xf9451281,0xb50000c1,0x90028100,0x9129e800,0x9427d29e,0xaa0003e1,0xf9051280,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020}};
     void *klass=find_class("UnityEngine","Input");
     void *(*resolve)(const char *)=dlsym(RTLD_DEFAULT,"il2cpp_resolve_icall");
     for(int i=0;i<3;i++){
         const void *method=class_get_method_from_name(klass,names[i],1);
         const uint32_t *code=method ? *(const uint32_t **)method : NULL;
-        if(!code || (memcmp(code,expected[i],sizeof expected[i]) && memcmp(code,expected_1_6_3[i],sizeof expected_1_6_3[i]))){input_keyboard_escape_start(false);return false;}
+        if(!code || (memcmp(code,expected[i],sizeof expected[i]) && memcmp(code,expected_1_6_3[i],sizeof expected_1_6_3[i]) && memcmp(code,expected_cn_1_6_3[i],sizeof expected_cn_1_6_3[i]))){input_keyboard_escape_start(false);return false;}
         NSString *name=[NSString stringWithFormat:@"UnityEngine.Input::%s(UnityEngine.KeyCode)",names[i]];
         void *native=resolve ? resolve(name.UTF8String) : NULL;
         if(!native){input_keyboard_escape_start(false);return false;}

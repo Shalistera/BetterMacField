@@ -8,7 +8,7 @@ static atomic_uint native_sized_render_calls, native_sized_render_nonmain, nativ
 
 static bool native_temporal_owns_render(uintptr_t entry,const uint8_t *base) {
     return entry==(uintptr_t)native_sized_render &&
-        (uintptr_t)native_sized_render_original==(uintptr_t)base+0x126aead0;
+        (uintptr_t)native_sized_render_original==(uintptr_t)base+(probe_cn_client ? 0x126fe400 : 0x126aead0);
 }
 
 static void native_sized_render(void *owner,void *parameters,void *culling,void *camera,void *context,void *command) {
@@ -36,7 +36,8 @@ static bool native_temporal_install_size(void *hg) {
     if(wrapper[2]==(uintptr_t)native_sized_render)return true;
     Dl_info info={0};
     const uint8_t expected[]={0xfc,0x6f,0xba,0xa9,0xfa,0x67,0x01,0xa9,0xf8,0x5f,0x02,0xa9,0xf6,0x57,0x03,0xa9};
-    if(!dladdr((void *)wrapper[2],&info) || wrapper[2]!=(uintptr_t)info.dli_fbase+0x126aead0 ||
+    uintptr_t expectedRVA=probe_cn_client ? 0x126fe400 : 0x126aead0;
+    if(!dladdr((void *)wrapper[2],&info) || wrapper[2]!=(uintptr_t)info.dli_fbase+expectedRVA ||
        memcmp((void *)wrapper[2],expected,sizeof expected))return false;
     void *klass=find_class("UnityEngine.HyperGryphEngineCode","HGRenderPathParamsCPP");
     const char *names[]={"enableTAAU","sceneRTSize","taauRTSize","finalRTSize"};
@@ -47,6 +48,6 @@ static bool native_temporal_install_size(void *hg) {
     }
     native_sized_render_original=(EFNativeSizedRender)wrapper[2];
     *(void **)(path+16)=(void *)native_sized_render;
-    fprintf(output,"native_temporal_size=installed rva=0x126aead0\n");
+    fprintf(output,"native_temporal_size=installed rva=0x%lx\n",expectedRVA);
     return true;
 }
