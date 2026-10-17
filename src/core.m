@@ -12,6 +12,11 @@
 #include <unistd.h>
 
 static FILE *output;
+static bool probe_cn_client;
+static NSString *runtime_path(NSString *name) {
+    NSString *root=NSProcessInfo.processInfo.environment[@"BMF_RUNTIME_DIR"] ?: NSTemporaryDirectory();
+    return [root stringByAppendingPathComponent:name];
+}
 static uint32_t override_volume_handle,override_profile_handle;
 static bool character_shadow_override_enabled,character_shadow_startup_pending=true;
 static NSString *const character_shadow_saved_key=@"BetterMacFieldCharacterSelfShadowEnabled";
@@ -31,6 +36,7 @@ static NSString *const character_shadow_saved_key=@"BetterMacFieldCharacterSelfS
 #include "menu.inc"
 
 static dispatch_source_t core_timer;
+static bool core_settings_pending=true;
 static void core_start(void) {
     if(!bind_api() || !domain_get())return;
     hub_class=find_class("HG.Rendering.Runtime","HGRenderPipelineSettingHub");
@@ -45,6 +51,10 @@ static void core_start(void) {
             core_command();
             input_auto_window_update();
             background_perf_tick();
+            if(core_settings_pending && input_static(find_class("Beyond.Scripts.Quality","QualityManager"),"get_instance",0,NULL)){
+                game_settings(@{@"components":@YES,@"reveal":@YES,@"resolutionBridge":@YES});
+                core_settings_pending=false;
+            }
             game_settings_tick();
             scene_lod_startup_tick();
             display_upscaler_startup_tick();
@@ -65,7 +75,8 @@ static void core_start(void) {
 
 __attribute__((constructor)) static void core_install(void) {
     @autoreleasepool {
-        output=fopen("/private/tmp/bettermacfield-runtime.log","w");if(!output)return;
+        probe_cn_client=[NSBundle.mainBundle.bundleIdentifier isEqual:@"com.hypergryph.endfield"];
+        output=fopen(runtime_path(@"bettermacfield-runtime.log").fileSystemRepresentation,"w");if(!output)return;
         setvbuf(output,NULL,_IOLBF,0);
         fprintf(output,"core=starting pid=%d\n",getpid());
         [NSUserDefaults.standardUserDefaults registerDefaults:@{character_shadow_saved_key:@YES}];

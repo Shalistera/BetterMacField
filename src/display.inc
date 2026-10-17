@@ -437,7 +437,7 @@ static void display_control(NSDictionary *command) {
         }
         if(mutate && width && matches)display_finish_pending_resolution();
         if(mutate)display_last_result=matches ? @"已应用" : @"游戏未采用请求尺寸";
-        [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil] writeToFile:@"/private/tmp/bettermacfield-display.json" atomically:YES];
+        [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil] writeToFile:runtime_path(@"bettermacfield-display.json") atomically:YES];
         fprintf(output,"display_result=%s output=%dx%d\n",ok ? (matches ? "verified" : "not_applied") : "failed",[state[@"width"] intValue],[state[@"height"] intValue]);
     });
 }

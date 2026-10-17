@@ -5,6 +5,14 @@ static bool *graphics_engine_cpp_flag(void) {
     if(!native || !dladdr(native,&info))return NULL;
     uint8_t *base=info.dli_fbase;
     uintptr_t rva=(uintptr_t)native-(uintptr_t)base;
+    if(probe_cn_client && rva==0x117f8ae8) {
+        const uint8_t wrapper[]={0xfd,0x7b,0xbf,0xa9,0xfd,0x03,0x00,0x91,0x02,0x85,0x28,0x94,0xfd,0x7b,0xc1,0xa8,0xc0,0x03,0x5f,0xd6};
+        const uint8_t getter[]={0x28,0xc5,0x02,0xf0,0x00,0x65,0x5f,0x39,0xc0,0x03,0x5f,0xd6};
+        if(memcmp(native,wrapper,sizeof wrapper) || memcmp(base+0x12219ef8,getter,sizeof getter))return NULL;
+        // CN 1.6.3: IDA-confirmed ADRP/LDRB, inside the writable __DATA segment.
+        bool *flag=(bool *)(base+0x17ac07d9);
+        return *(uint8_t *)flag<=1 ? flag : NULL;
+    }
     if(rva==0x117a9e08) {
         /* 1.6.3 getter: ADRP/LDRB from the verified writable __DATA byte. */
         const uint8_t wrapper[]={0xfd,0x7b,0xbf,0xa9,0xfd,0x03,0x00,0x91,0xee,0x81,0x28,0x94,0xfd,0x7b,0xc1,0xa8,0xc0,0x03,0x5f,0xd6};
@@ -21,7 +29,6 @@ static bool *graphics_engine_cpp_flag(void) {
     bool *flag=(bool *)(base+0x135df379);
     return *(uint8_t *)flag<=1 ? flag : NULL;
 }
-
 #include <mach/mach.h>
 #include <mach/mach_vm.h>
 static bool graphics_native_read(uintptr_t address,void *target,size_t size) {
@@ -55,8 +62,10 @@ static bool graphics_gbuffer_retention(bool enabled) {
     void **slot=(void **)((uint8_t *)klass+0x260);
     const void *method=slot[1];void *pointer=slot[0];Dl_info info={0};
     const uint8_t expected[]={0x68,0x4b,0x05,0xf0,0x08,0x61,0x0f,0x91,0x08,0x01,0x40,0xf9,0x08,0x41,0x40,0xf9};
+    const uint8_t expectedCN[]={0x08,0x75,0x05,0xd0,0x08,0x61,0x3d,0x91,0x08,0x01,0x40,0xf9,0x08,0x41,0x40,0xf9};
     if(!pointer || !method || !dladdr(pointer,&info) ||
-       (uintptr_t)pointer-(uintptr_t)info.dli_fbase!=0xcef7174 || memcmp(pointer,expected,16) ||
+       (uintptr_t)pointer-(uintptr_t)info.dli_fbase!=(probe_cn_client ? 0xcef716c : 0xcef7174) ||
+       memcmp(pointer,probe_cn_client ? expectedCN : expected,16) ||
        strcmp(method_get_name(method),"GetGBufferProfileConfig") || method_get_param_count(method)!=0) {
         fprintf(output,"gbuffer_retention=identity_mismatch\n");return false;
     }

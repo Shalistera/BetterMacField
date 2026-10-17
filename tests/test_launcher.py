@@ -9,6 +9,29 @@ import bettermacfield as bmf
 
 
 class LauncherBoundaries(unittest.TestCase):
+    def test_cn_uses_cn_binary_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            app = Path(folder)
+            (app/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier=bmf.CLIENTS['cn'], CFBundleShortVersionString='1.6.3')))
+            (app/'test-code').write_bytes(b'cn')
+            with patch.object(bmf.platform, 'system', return_value='Darwin'), patch.object(bmf.platform, 'machine', return_value='arm64'), patch.object(bmf, 'EXPECTED', {'test-code': hashlib.sha256(b'global').hexdigest()}), patch.object(bmf, 'CN_EXPECTED', {'test-code': hashlib.sha256(b'cn').hexdigest()}), patch.object(bmf.subprocess, 'check_output', return_value='PlayTools.framework/PlayTools'):
+                self.assertEqual(bmf.validate(app)['CFBundleIdentifier'], bmf.CLIENTS['cn'])
+                (app/'test-code').write_bytes(b'global')
+                with self.assertRaisesRegex(RuntimeError, 'identity changed'):
+                    bmf.validate(app)
+
+    def test_regions_keep_runtime_and_restore_records_separate(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(bmf.Path, 'home', return_value=Path(folder)), patch.object(bmf, 'STATE', Path(folder)/'state'), patch.object(bmf, 'LOG'), patch.object(bmf, 'COMMAND'), patch.object(bmf, 'STATUS'), patch.object(bmf, 'RESTORE'):
+            global_root = bmf.configure_runtime(bmf.CLIENTS['global'])
+            global_command, global_restore = bmf.COMMAND, bmf.RESTORE
+            cn_root = bmf.configure_runtime(bmf.CLIENTS['cn'])
+            self.assertNotEqual(global_root, cn_root)
+            self.assertNotEqual(global_command, bmf.COMMAND)
+            self.assertNotEqual(global_restore, bmf.RESTORE)
+            self.assertIn('/com.hypergryph.endfield/Data/tmp/', str(cn_root))
+            with self.assertRaisesRegex(RuntimeError, 'Unknown client'):
+                bmf.configure_runtime('unrelated.app')
+
     def test_changed_binary_stops_before_dependency_inspection(self):
         with tempfile.TemporaryDirectory() as folder:
             app = Path(folder)/'client.app';app.mkdir()

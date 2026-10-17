@@ -11,6 +11,65 @@ static _Atomic(uintptr_t) *input_legacy_pointer_slot;
 static void (*input_legacy_pointer_original)(float *);
 static _Atomic(bool) input_legacy_pointer_active;
 static _Atomic(float) input_legacy_pointer_x,input_legacy_pointer_y;
+static _Atomic(uintptr_t) *input_legacy_scroll_slot;
+static void (*input_legacy_scroll_original)(float *);
+static uint32_t input_legacy_scroll_handle;
+static const void *input_legacy_scroll_read;
+
+static void input_legacy_scroll(float *delta) {
+    if(input_legacy_scroll_handle && NSApp.isActive && !input_native_overlay_visible()){
+        void *exception=NULL;
+        void *value=runtime_invoke(input_legacy_scroll_read,
+            gchandle_get_target(input_legacy_scroll_handle),NULL,&exception);
+        if(value && !exception){
+            // Share InputSystem's per-update delta lifetime with legacy consumers.
+            // MouseState uses wheel ticks of 120; legacy Input exposes wheel steps.
+            const float *scroll=object_unbox(value);
+            delta[0]=scroll[0]/120.0f;delta[1]=scroll[1]/120.0f;
+            return;
+        }
+    }
+    input_legacy_scroll_original(delta);
+}
+
+static bool input_legacy_scroll_start(bool enabled) {
+    if(input_legacy_scroll_slot){
+        uintptr_t expected=(uintptr_t)input_legacy_scroll;
+        atomic_compare_exchange_strong(input_legacy_scroll_slot,&expected,(uintptr_t)input_legacy_scroll_original);
+        input_legacy_scroll_slot=NULL;
+    }
+    if(input_legacy_scroll_handle){gchandle_free(input_legacy_scroll_handle);input_legacy_scroll_handle=0;}
+    if(!enabled)return true;
+    void *klass=find_class("UnityEngine","Input");
+    const void *method=class_get_method_from_name(klass,"get_mouseScrollDelta_Injected",1);
+    const uint32_t *code=method ? *(const uint32_t **)method : NULL;
+    // Verified iOS 1.6.3 wrapper; replace only the writable icall cache.
+    const uint32_t expected[]={0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,
+        0xb0037e14,0xf9432681,0xb50000c1,0xf0026300,0x9115d800,0x9427cc1e,
+        0xaa0003e1,0xf9032680,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020};
+    const uint32_t expected_cn_1_6_3[]={0xa9be4ff4,0xa9017bfd,0x910043fd,0xaa0003f3,0xb003a0f4,0xf945c681,0xb50000c1,0xb0028100,0x910b1800,0x9427d07d,0xaa0003e1,0xf905c680,0xaa1303e0,0xa9417bfd,0xa8c24ff4,0xd61f0020};
+    if(!code || (memcmp(code,expected,sizeof expected) && memcmp(code,expected_cn_1_6_3,sizeof expected_cn_1_6_3)))return false;
+    bool ok=false;
+    void *control=invoke(gchandle_get_target(input_menu_mouse_handle),"get_scroll",0,NULL,&ok);
+    if(!ok || !control)return false;
+    input_legacy_scroll_read=class_get_method_from_name(object_get_class(control),"ReadValue",0);
+    if(!input_legacy_scroll_read)return false;
+    void *(*resolve)(const char *)=dlsym(RTLD_DEFAULT,"il2cpp_resolve_icall");
+    void *native=resolve ? resolve("UnityEngine.Input::get_mouseScrollDelta_Injected(UnityEngine.Vector2&)") : NULL;
+    if(!native)return false;
+    input_static(klass,"get_mouseScrollDelta",0,NULL);
+    int64_t pages=((code[4]>>29)&3)|(((code[4]>>5)&0x7ffff)<<2);
+    if(pages&(1<<20))pages-=1<<21;
+    uintptr_t slot=(((uintptr_t)(code+4))&~(uintptr_t)4095)+pages*4096+((code[5]>>10)&4095)*8;
+    _Atomic(uintptr_t) *cache=(_Atomic(uintptr_t) *)slot;uintptr_t original=(uintptr_t)native;
+    input_legacy_scroll_original=native;
+    input_legacy_scroll_handle=gchandle_new(control,false);
+    if(!atomic_compare_exchange_strong(cache,&original,(uintptr_t)input_legacy_scroll)){
+        gchandle_free(input_legacy_scroll_handle);input_legacy_scroll_handle=0;return false;
+    }
+    input_legacy_scroll_slot=cache;
+    return true;
+}
 
 static void input_legacy_pointer(float *position) {
     if(atomic_load(&input_legacy_pointer_active)){
@@ -37,7 +96,8 @@ static bool input_legacy_pointer_start(bool enabled) {
         0x910003e0,0xd63f0100,0x2d4007e0,0xbd400be2,0xa9427bfd,0xa9414ff4,0x9100c3ff,0xd65f03c0};
     // iOS 1.6.3; keep the same icall cache swap and exact byte guard.
     const uint32_t expected_1_6_3[]={0xd100c3ff,0xa9014ff4,0xa9027bfd,0x910083fd,0xb9000bff,0xf90003ff,0xb0037e13,0xf9432268,0xb50000c8,0xf0026300,0x9114c800,0x9427cc56,0xaa0003e8,0xf9032260,0x910003e0,0xd63f0100,0x2d4007e0,0xbd400be2,0xa9427bfd,0xa9414ff4,0x9100c3ff,0xd65f03c0};
-    if(!code || (memcmp(code,expected,sizeof expected) && memcmp(code,expected_1_6_3,sizeof expected_1_6_3)))return false;
+    const uint32_t expected_cn_1_6_3[]={0xd100c3ff,0xa9014ff4,0xa9027bfd,0x910083fd,0xb9000bff,0xf90003ff,0xb003a0f3,0xf945c268,0xb50000c8,0xb0028100,0x910a0800,0x9427d0b5,0xaa0003e8,0xf905c260,0x910003e0,0xd63f0100,0x2d4007e0,0xbd400be2,0xa9427bfd,0xa9414ff4,0x9100c3ff,0xd65f03c0};
+    if(!code || (memcmp(code,expected,sizeof expected) && memcmp(code,expected_1_6_3,sizeof expected_1_6_3) && memcmp(code,expected_cn_1_6_3,sizeof expected_cn_1_6_3)))return false;
     void *(*resolve)(const char *)=dlsym(RTLD_DEFAULT,"il2cpp_resolve_icall");
     void *native=resolve ? resolve("UnityEngine.Input::get_mousePosition_Injected(UnityEngine.Vector3&)") : NULL;
     if(!native)return false;
@@ -54,6 +114,9 @@ static bool input_legacy_pointer_start(bool enabled) {
 }
 
 static bool input_window_event(NSEvent *event) {
+    // A hidden captured cursor may remain at the border after resizing.
+    // Scroll is input to the game, not part of an AppKit resize gesture.
+    if(event.type==NSEventTypeScrollWheel)return false;
     // Let AppKit receive the complete resize gesture, including its mouse-up.
     if(input_window_edge_drag){
         if(event.type==NSEventTypeLeftMouseUp)input_window_edge_drag=false;
@@ -95,6 +158,7 @@ static void input_menu_release(void) {
 }
 
 static bool input_menu_start(bool enabled) {
+    input_legacy_scroll_start(false);
     input_legacy_pointer_start(false);
     if(input_menu_mouse_handle){
         input_menu_release();
@@ -134,6 +198,7 @@ static bool input_menu_start(bool enabled) {
     int unlocked=0;void *args[]={&unlocked};
     input_static(find_class("UnityEngine","Cursor"),"set_lockState",1,args);
     fprintf(output,"input_legacy_pointer_ready=%d\n",input_legacy_pointer_start(true));
+    fprintf(output,"input_legacy_scroll_ready=%d\n",input_legacy_scroll_start(true));
     fprintf(output,"input_menu_mouse_ready=1 device=%d owned=%d\n",input_menu_device_id,input_menu_mouse_owned);
     return true;
 }
@@ -141,7 +206,7 @@ static bool input_menu_start(bool enabled) {
 static bool input_menu_event(NSEvent *event) {
     if(!input_menu_mouse_handle)return false;
     void *mode=input_static(find_class("Beyond","DeviceInfo"),"get_usingKeyboard",0,NULL);
-    if(input_cursor_captured || !NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
+    if((input_cursor_captured && event.type!=NSEventTypeScrollWheel) || !NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
         input_menu_release();return false;
     }
     NSView *view=event.window.contentView;
