@@ -1,0 +1,8 @@
+BetterMacField contains the project's integration and launcher source code.
+The MIT license applies to that source code. Identifiers, interface names,
+layout information and short expected-byte fingerprints identify supported
+client implementations; they do not represent ownership of the game.
+
+Arknights: Endfield game content and trademarks belong to their respective
+rights holders. PlayCover/PlayTools and Apple's Metal/MetalFX remain separate
+components with their own terms. They are not bundled in this repository.
