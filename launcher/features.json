@@ -1,0 +1,211 @@
+{
+  "fields": [
+    {
+      "page": "画面",
+      "key": "height",
+      "title": "输出分辨率",
+      "default": 1080,
+      "choices": [
+        {
+          "title": "1280 × 720",
+          "value": 720
+        },
+        {
+          "title": "1920 × 1080",
+          "value": 1080
+        },
+        {
+          "title": "2560 × 1440",
+          "value": 1440
+        },
+        {
+          "title": "3840 × 2160",
+          "value": 2160
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "画面",
+      "key": "upscaler",
+      "title": "超分模式",
+      "default": "metalfx-spatial",
+      "choices": [
+        {
+          "title": "TAAU · 原版",
+          "value": "taau"
+        },
+        {
+          "title": "MetalFX Temporal · 实验",
+          "value": "metalfx-native"
+        },
+        {
+          "title": "MetalFX Spatial",
+          "value": "metalfx-spatial"
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "画面",
+      "key": "quality",
+      "title": "超分质量",
+      "default": "质量",
+      "choices": [
+        {
+          "title": "质量 · 66.7%",
+          "value": "质量"
+        },
+        {
+          "title": "平衡 · 58.8%",
+          "value": "平衡"
+        },
+        {
+          "title": "性能 · 50%",
+          "value": "性能"
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "画面",
+      "key": "sharpen",
+      "title": "锐化",
+      "default": "original",
+      "choices": [
+        {
+          "title": "游戏默认",
+          "value": "original"
+        },
+        {
+          "title": "关闭 TAAU 锐化",
+          "value": "no-taau"
+        },
+        {
+          "title": "关闭全部锐化",
+          "value": "off"
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "画面",
+      "key": "lod",
+      "title": "场景 LOD 距离",
+      "default": "restore",
+      "choices": [
+        {
+          "title": "手机默认",
+          "value": "restore"
+        },
+        {
+          "title": "PC 中档",
+          "value": "pc-medium"
+        },
+        {
+          "title": "PC 高档",
+          "value": "pc-high"
+        }
+      ],
+      "help": "已加载的远景可能延迟切换。"
+    },
+    {
+      "page": "光影",
+      "key": "selfShadow",
+      "title": "角色自阴影",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "characterLighting",
+      "title": "角色光照与阴影滤波",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "characterSpecular",
+      "title": "角色 PC 高光公式 · 实验",
+      "default": false,
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "shadowResolution",
+      "title": "阴影精度",
+      "default": 1024,
+      "choices": [
+        {
+          "title": "游戏默认",
+          "value": 0
+        },
+        {
+          "title": "1024",
+          "value": 1024
+        },
+        {
+          "title": "2048",
+          "value": 2048
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "gtao",
+      "title": "GTAO 环境遮蔽",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "contact",
+      "title": "接触阴影",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "ssr",
+      "title": "屏幕空间反射 SSR",
+      "default": false,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "keyboard",
+      "title": "自动键鼠模式",
+      "default": true,
+      "help": "滚轮缩放镜头；Alt／Option＋滚轮选择交互项。"
+    },
+    {
+      "page": "操作",
+      "key": "backgroundLimit",
+      "title": "后台节能 · 15 FPS",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "metalHUD",
+      "title": "启动时显示 Metal HUD",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "compareRendering",
+      "title": "对比时使用 TAAU · 50% 渲染",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "compareLOD",
+      "title": "对比时恢复手机 LOD",
+      "default": true,
+      "help": ""
+    }
+  ]
+}

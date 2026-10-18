@@ -8,7 +8,9 @@ static _Atomic(float) native_temporal_jitter_y_sign=-1;
 static atomic_uint native_temporal_motion_mode;
 static atomic_uint native_temporal_width,native_temporal_height,native_temporal_generation;
 static atomic_ulong native_temporal_encodes,native_temporal_aliases,native_temporal_completed,native_temporal_errors;
+static atomic_ulong native_temporal_scaler_creations,native_temporal_history_resets;
 static atomic_ulong native_temporal_fullres_calls;
+static atomic_bool native_temporal_sample_motion;
 static char native_temporal_pipeline_key,native_temporal_encoder_key,native_temporal_buffer_key,native_temporal_alias_key;
 static NSString *native_temporal_reason=@"disabled";
 
@@ -33,7 +35,7 @@ static NSObject *native_temporal_lock(void) {
     dispatch_once(&once,^{lock=[NSObject new];});return lock;
 }
 
-
+#include "temporal_alignment.inc"
 #include "native_spatial.inc"
 
 static void native_temporal_classify(id pipeline,NSString *description) {
@@ -112,6 +114,7 @@ static void native_temporal_ended(id encoder) {
     objc_setAssociatedObject(encoder,&native_temporal_encoder_key,nil,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if(!atomic_load(&native_temporal_enabled) || !frame.matched)return;
     if(atomic_load(&native_temporal_bypass)){
+        temporal_alignment_capture(frame,frame.target);
         native_temporal_reason=@"diagnostic bypass; original full-resolution TAAU";return;
     }
     if(atomic_load(&native_spatial_enabled)){native_spatial_ended(frame);return;}
@@ -133,17 +136,22 @@ static void native_temporal_ended(id encoder) {
             static unsigned generation;
             static double lastEncode;
             id<MTLDevice> device=frame.commandBuffer.device;
-            bool reset=generation!=atomic_load(&native_temporal_generation) || !scaler ||
+            unsigned requestedGeneration=atomic_load(&native_temporal_generation);
+            bool recreate=!scaler ||
                 scaler.inputWidth!=color.width || scaler.inputHeight!=color.height ||
                 scaler.outputWidth!=width || scaler.outputHeight!=height;
-            if(reset){
+            // Camera changes and mode toggles discard history without rebuilding
+            // the scaler or restarting its asynchronous backend initialization.
+            bool reset=recreate || generation!=requestedGeneration;
+            if(recreate){
                 MTLFXTemporalScalerDescriptor *descriptor=[MTLFXTemporalScalerDescriptor new];
                 descriptor.inputWidth=color.width;descriptor.inputHeight=color.height;
                 descriptor.outputWidth=width;descriptor.outputHeight=height;
                 descriptor.colorTextureFormat=color.pixelFormat;descriptor.depthTextureFormat=depth.pixelFormat;
                 descriptor.motionTextureFormat=MTLPixelFormatRG16Float;descriptor.outputTextureFormat=color.pixelFormat;
                 scaler=[descriptor newTemporalScalerWithDevice:device];
-                generation=atomic_load(&native_temporal_generation);unpacked=nil;result=nil;
+                unpacked=nil;result=nil;lastEncode=0;
+                if(scaler)atomic_fetch_add(&native_temporal_scaler_creations,1);
             }
             if(!scaler){native_temporal_reason=@"MetalFX scaler unavailable";return;}
             if(!unpack){
@@ -183,6 +191,33 @@ static void native_temporal_ended(id encoder) {
             NSUInteger group=unpack.threadExecutionWidth;
             [compute dispatchThreads:MTLSizeMake(color.width,color.height,1) threadsPerThreadgroup:MTLSizeMake(group,1,1)];
             [compute endEncoding];
+            if(atomic_exchange(&native_temporal_sample_motion,false)){
+                NSUInteger rowBytes=(color.width*4+255)&~255UL;
+                id<MTLBuffer> readback=[device newBufferWithLength:rowBytes*color.height options:MTLResourceStorageModeShared];
+                id<MTLBlitCommandEncoder> blit=[frame.commandBuffer blitCommandEncoder];
+                [blit copyFromTexture:unpacked sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0)
+                    sourceSize:MTLSizeMake(color.width,color.height,1) toBuffer:readback destinationOffset:0
+                    destinationBytesPerRow:rowBytes destinationBytesPerImage:rowBytes*color.height];
+                [blit endEncoding];
+                NSUInteger inputWidth=color.width,inputHeight=color.height;
+                [frame.commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer){
+                    if(buffer.status!=MTLCommandBufferStatusCompleted)return;
+                    double sumX=0,sumY=0,maxX=0,maxY=0;NSUInteger count=0,nearZero=0;
+                    NSMutableArray *grid=[NSMutableArray array];
+                    for(NSUInteger y=0;y<inputHeight;y++)for(NSUInteger x=0;x<inputWidth;x++){
+                        const _Float16 *v=(const _Float16 *)((const char *)readback.contents+y*rowBytes+x*4);
+                        double vx=(float)v[0]*inputWidth,vy=(float)v[1]*inputHeight;
+                        sumX+=fabs(vx);sumY+=fabs(vy);maxX=fmax(maxX,fabs(vx));maxY=fmax(maxY,fabs(vy));count++;
+                        if(fabs(vx)<.01 && fabs(vy)<.01)nearZero++;
+                        if(x%MAX(inputWidth/8,1)==0 && y%MAX(inputHeight/6,1)==0)
+                            [grid addObject:@[@(x),@(y),@(vx),@(vy)]];
+                    }
+                    NSDictionary *sample=@{@"size":@[@(inputWidth),@(inputHeight)],@"meanAbsolutePixels":@[@(sumX/count),@(sumY/count)],
+                        @"maxAbsolutePixels":@[@(maxX),@(maxY)],@"nearZeroFraction":@((double)nearZero/count),@"grid":grid};
+                    [[NSJSONSerialization dataWithJSONObject:sample options:NSJSONWritingPrettyPrinted error:nil]
+                        writeToFile:runtime_path(@"endfield-ios-native-motion.json") atomically:YES];
+                }];
+            }
             double now=NSProcessInfo.processInfo.systemUptime;
             scaler.colorTexture=color;scaler.depthTexture=depth;scaler.motionTexture=unpacked;scaler.outputTexture=result;
             scaler.inputContentWidth=color.width;scaler.inputContentHeight=color.height;
@@ -192,8 +227,12 @@ static void native_temporal_ended(id encoder) {
             scaler.jitterOffsetX=atomic_load(&native_temporal_jitter_x_sign)*frame.jitterX;
             scaler.jitterOffsetY=atomic_load(&native_temporal_jitter_y_sign)*frame.jitterY;
             scaler.motionVectorScaleX=color.width;scaler.motionVectorScaleY=color.height;
-            scaler.depthReversed=YES;scaler.preExposure=1;scaler.reset=reset || now-lastEncode>.5;
-            [scaler encodeToCommandBuffer:frame.commandBuffer];lastEncode=now;
+            bool resetHistory=reset || now-lastEncode>.5;
+            scaler.depthReversed=YES;scaler.preExposure=1;scaler.reset=resetHistory;
+            [scaler encodeToCommandBuffer:frame.commandBuffer];
+            if(resetHistory)atomic_fetch_add(&native_temporal_history_resets,1);
+            generation=requestedGeneration;lastEncode=now;
+            temporal_alignment_capture(frame,result);
             objc_setAssociatedObject(frame.commandBuffer,&native_temporal_alias_key,@[frame.target,result],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             [frame.commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer){
                 if(buffer.status==MTLCommandBufferStatusCompleted)atomic_fetch_add(&native_temporal_completed,1);
@@ -228,6 +267,46 @@ static NSDictionary *native_temporal_state(void) {
         @"width":@(atomic_load(&native_temporal_width)),@"height":@(atomic_load(&native_temporal_height)),
         @"encodes":@(atomic_load(&native_temporal_encodes)),@"aliases":@(atomic_load(&native_temporal_aliases)),
         @"completed":@(atomic_load(&native_temporal_completed)),@"errors":@(atomic_load(&native_temporal_errors)),
+        @"scalerCreations":@(atomic_load(&native_temporal_scaler_creations)),
+        @"historyResets":@(atomic_load(&native_temporal_history_resets)),
         @"fullResolutionRequests":@(atomic_load(&native_temporal_fullres_calls)),
         @"reason":native_temporal_reason ?: @""};
+}
+
+static void native_temporal_control(NSDictionary *command) {
+    if(command[@"jitterXSign"]){
+        float sign=[command[@"jitterXSign"] floatValue];
+        if((sign==1 || sign==-1) && atomic_exchange(&native_temporal_jitter_x_sign,sign)!=sign)
+            atomic_fetch_add(&native_temporal_generation,1);
+    }
+    if(command[@"motionMode"]){
+        unsigned mode=[command[@"motionMode"] unsignedIntValue];
+        if(mode<=1 && atomic_exchange(&native_temporal_motion_mode,mode)!=mode)
+            atomic_fetch_add(&native_temporal_generation,1);
+    }
+    if([command[@"sampleAlignment"] boolValue]){
+        @synchronized(native_temporal_lock()){
+            if(!atomic_load(&temporal_alignment_remaining)){
+                temporal_alignment_rows=[NSMutableArray array];
+                atomic_store(&temporal_alignment_remaining,16);
+            }
+        }
+    }
+    if(command[@"jitterYSign"]){
+        float sign=[command[@"jitterYSign"] floatValue];
+        if((sign==1 || sign==-1) && atomic_exchange(&native_temporal_jitter_y_sign,sign)!=sign)
+            atomic_fetch_add(&native_temporal_generation,1);
+    }
+    // Keep the original full-resolution allocation for a controlled TAAU/MetalFX comparison.
+    if(command[@"bypass"] && atomic_exchange(&native_temporal_bypass,[command[@"bypass"] boolValue])!=[command[@"bypass"] boolValue])
+        atomic_fetch_add(&native_temporal_generation,1);
+    if([command[@"sampleMotion"] boolValue])atomic_store(&native_temporal_sample_motion,true);
+    if(command[@"enabled"] && !native_temporal_configure([command[@"enabled"] boolValue],
+       [command[@"width"] unsignedIntValue],[command[@"height"] unsignedIntValue])){
+        fprintf(output,"native_temporal=invalid_output_size\n");return;
+    }
+    NSDictionary *state=native_temporal_state();
+    [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil]
+        writeToFile:runtime_path(@"endfield-ios-native-temporal.json") atomically:YES];
+    fprintf(output,"native_temporal=%s\n",[[NSString alloc] initWithData:[NSJSONSerialization dataWithJSONObject:state options:0 error:nil] encoding:NSUTF8StringEncoding].UTF8String);
 }

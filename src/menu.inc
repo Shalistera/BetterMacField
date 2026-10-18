@@ -1,8 +1,7 @@
 static NSString *const core_shadow_key=@"BetterMacFieldShadowResolution";
 static bool core_shadow_pending=true;
 static int core_shadow_current;
-static bool core_comparison_active,core_comparison_shadow;
-static int core_comparison_resolution;
+static bool core_comparison_active;
 static bool core_shadow_resolution(int resolution,bool remember) {
     if(resolution!=0 && resolution!=1024 && resolution!=2048)return false;
     bool ok=true;
@@ -19,132 +18,215 @@ static void core_shadow_startup(void) {
     int saved=(int)[NSUserDefaults.standardUserDefaults integerForKey:core_shadow_key];
     if(saved)core_shadow_resolution(saved,false);
 }
+static NSDictionary *core_comparison_saved;
+static NSDictionary *bmf_lighting_state(void) {
+    return @{@"screenSpace":@(atomic_load(&metal_screen_ao_strength)>0),@"strength":@(atomic_load(&metal_screen_ao_strength)),
+        @"radius":@(atomic_load(&metal_screen_ao_radius)),@"nativeContact":@(atomic_load(&metal_native_contact_strength)>0),
+        @"contactStrength":@(atomic_load(&metal_native_contact_strength)),@"contactLength":@(atomic_load(&metal_native_contact_length)),
+        @"reflection":@(atomic_load(&metal_ssr_history_enabled)),@"ssrStrength":@(atomic_load(&metal_ssr_strength)),
+        @"ssrSteps":@(atomic_load(&metal_ssr_steps)),@"characterMode":@(atomic_load(&character_skin_mode))};
+}
+static NSString *bmf_upscaler_mode(void) {
+    return !atomic_load(&native_temporal_enabled) ? @"taau" :
+        (atomic_load(&native_spatial_enabled) ? @"metalfx-spatial" : @"metalfx-native");
+}
+static NSMutableDictionary *bmf_comparison_state(bool rendering,bool lod) {
+    NSMutableDictionary *state=[@{@"lighting":bmf_lighting_state(),
+        @"shadow":@(character_shadow_override_enabled),@"shadowResolution":@(core_shadow_current),
+        @"sharpen":display_state()[@"sharpen"]} mutableCopy];
+    if(rendering){
+        NSNumber *scale=display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"];
+        if(!scale)return nil;
+        state[@"upscaler"]=bmf_upscaler_mode();state[@"renderScale"]=scale;
+    }
+    if(lod){
+        if(!scene_lod_is_ready())return nil;
+        state[@"lod"]=scene_lod_selected_profile();
+    }
+    return state;
+}
+static bool bmf_comparison_apply(NSDictionary *state) {
+    NSDictionary *lighting=state[@"lighting"];
+    bool ok=native_lighting_control(lighting);
+    ok=override_volume(@"HGCharacterVolume",@{@"enabled":state[@"shadow"]},false) && ok;
+    ok=core_shadow_resolution([state[@"shadowResolution"] intValue],false) && ok;
+    character_skin_control(@{@"mode":lighting[@"characterMode"]});
+    metal_ssr_history_control(@{@"strength":lighting[@"ssrStrength"],@"steps":lighting[@"ssrSteps"]});
+    for(NSString *key in @[@"1KSharpenStrength",@"2KSharpenStrength",@"4KSharpenStrength",@"postProcess"]){
+        NSNumber *value=state[@"sharpen"][key];
+        NSString *parameter=[key isEqual:@"postProcess"] ? @"SharpenEnabled|PostProcess" : [key stringByAppendingString:@"|TAAU"];
+        ok=override_parameter(get_hub(),parameter,value.stringValue,value==nil) && ok;
+    }
+    if(state[@"upscaler"]){
+        ok=display_upscaler(@{@"mode":state[@"upscaler"],@"remember":@NO,@"reapplyPreset":@NO}) && ok;
+        // Comparison uses only a process-local override, leaving the saved game tier intact.
+        ok=override_parameter(get_hub(),@"RenderingScale|RenderTargetSettings",[state[@"renderScale"] stringValue],false) && ok;
+        NSNumber *actual=display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"];
+        ok=actual && fabs(actual.doubleValue-[state[@"renderScale"] doubleValue])<0.001 && ok;
+    }
+    if(state[@"lod"])ok=scene_lod_control(@{@"profile":state[@"lod"],@"remember":@NO}) && ok;
+    return ok;
+}
+static bool bmf_compare(void) {
+    if(!input_scene_is_loaded())return false;
+    bool restoring=core_comparison_active;
+    bool rendering=restoring ? core_comparison_saved[@"upscaler"]!=nil : [bmf_settings[@"compareRendering"] boolValue];
+    bool lod=restoring ? core_comparison_saved[@"lod"]!=nil : [bmf_settings[@"compareLOD"] boolValue];
+    NSDictionary *before=bmf_comparison_state(rendering,lod);
+    if(!before){display_last_result=@"画面参数未就绪";return false;}
+    NSMutableDictionary *target=[(restoring ? core_comparison_saved : before) mutableCopy];
+    if(!restoring){
+        NSMutableDictionary *lighting=[before[@"lighting"] mutableCopy];
+        [lighting addEntriesFromDictionary:@{@"screenSpace":@NO,@"nativeContact":@NO,@"reflection":@NO,@"characterMode":@0}];
+        target[@"lighting"]=lighting;target[@"shadow"]=@NO;target[@"shadowResolution"]=@0;
+        target[@"sharpen"]=@{};
+        if(rendering){target[@"upscaler"]=@"taau";target[@"renderScale"]=@(display_parameter_for_ratio(0.5,display_state()));}
+        if(lod)target[@"lod"]=@"restore";
+    }
+    bool ok=bmf_comparison_apply(target);
+    if(ok){
+        if(!restoring)core_comparison_saved=before;
+        core_comparison_active=!restoring;
+        display_last_result=restoring ? @"已恢复增强设置" : @"已切回原生设置";
+    }else{
+        bool rolledBack=bmf_comparison_apply(before);
+        display_last_result=rolledBack ? @"切换失败，已恢复原设置" : @"切换未完成，请重新应用设置";
+    }
+    fprintf(output,"effects_comparison=%s baseline=%d rendering=%d lod=%d\n",ok ? "applied" : "failed",core_comparison_active,rendering,lod);return ok;
+}
+static void bmf_apply_settings(void) {
+    if(!bmf_settings_pending || !input_scene_is_loaded())return;
+    if(core_comparison_active && !bmf_compare())return;
+    bmf_settings_pending=false;
+    NSDictionary *v=bmf_settings;
+    int h=[v[@"height"] intValue];
+    if(h){
+        void *screen=find_class("UnityEngine","Screen");void *height=input_static(screen,"get_height",0,NULL);
+        if(height && *(int *)object_unbox(height)!=h)display_control(@{@"width":@(h*16/9),@"height":@(h)});
+    }
+    if(v[@"quality"])display_control(@{@"preset":v[@"quality"]});
+    if(v[@"upscaler"])display_upscaler(@{@"mode":v[@"upscaler"],@"remember":@YES});
+    if(v[@"sharpen"])display_sharpen(v[@"sharpen"]);
+    if(v[@"lod"])scene_lod_control(@{@"profile":v[@"lod"],@"remember":@YES});
+    bool ok=true;
+    if(v[@"upscaler"]){
+        BOOL expected=![v[@"upscaler"] isEqual:@"taau"];
+        ok=(atomic_load(&native_temporal_enabled)==expected);
+        if(expected)ok=ok && (atomic_load(&native_spatial_enabled)==[v[@"upscaler"] isEqual:@"metalfx-spatial"]);
+    }
+    if(v[@"selfShadow"])ok=override_volume(@"HGCharacterVolume",@{@"enabled":v[@"selfShadow"],@"remember":@YES},false) && ok;
+    if(v[@"shadowResolution"])ok=core_shadow_resolution([v[@"shadowResolution"] intValue],true) && ok;
+    if(v[@"characterLighting"]){
+        unsigned mode=([v[@"characterLighting"] boolValue] ? 3u : 0u) | ([v[@"characterSpecular"] boolValue] ? 4u : 0u);
+        character_skin_control(@{@"mode":@(mode)});
+        if(mode && !character_skin_source)ok=false;
+    }
+    if(v[@"gtao"] || v[@"contact"] || v[@"ssr"])
+        ok=native_lighting_control(@{@"screenSpace":v[@"gtao"] ?: @NO,@"nativeContact":v[@"contact"] ?: @NO,
+            @"reflection":v[@"ssr"] ?: @NO,@"strength":@1,@"radius":@1,@"contactStrength":@1,@"contactLength":@0.5}) && ok;
+    if(v[@"keyboard"]){
+        bool enabled=[v[@"keyboard"] boolValue];
+        if(!enabled){input_buttons(false);input_move(false);input_bridge(false,false);input_capture(false);select_input_mode(@"touch");}
+        input_auto_configure(@{@"enabled":@(enabled)});
+    }
+    if(v[@"backgroundLimit"])bmf_background_limit=[v[@"backgroundLimit"] boolValue];
+    bmf_settings_result=ok ? @"设置已应用" : @"部分光影未就绪，查看运行状态与日志";
+    fprintf(output,"launcher_settings=%s\n",ok ? "applied" : "partial");
+}
 @interface BMFMenu : NSObject<NSMenuDelegate>
 @end
 @implementation BMFMenu
-- (void)compare:(NSMenuItem *)item {
-    if(!input_scene_is_ready())return;
-    bool restoring=core_comparison_active;
-    if(!restoring){core_comparison_shadow=character_shadow_override_enabled;core_comparison_resolution=core_shadow_current;}
-    bool ok=override_volume(@"HGCharacterVolume",@{@"enabled":@(restoring && core_comparison_shadow)},false);
-    ok=core_shadow_resolution(restoring ? core_comparison_resolution : 0,false) && ok;
-    if(ok){
-        core_comparison_active=!restoring;
-        display_last_result=restoring ? @"已恢复原增强阴影设置" : @"原生阴影对比：再按 F11 恢复增强";
-    }else{
-        if(!restoring){
-            override_volume(@"HGCharacterVolume",@{@"enabled":@(core_comparison_shadow)},false);
-            core_shadow_resolution(core_comparison_resolution,false);
-        }
-        display_last_result=@"阴影切换未完成，原设置已保留";
-    }
-    fprintf(output,"effects_comparison=%s baseline=%d\n",ok ? "applied" : "failed",core_comparison_active);
+- (void)compare:(id)sender {bmf_compare();}
+- (void)feature:(NSMenuItem *)item {
+    NSDictionary *entry=item.representedObject;NSString *key=entry[@"key"];
+    id value=entry[@"value"] ?: @(![bmf_settings[key] boolValue]);
+    bmf_request_settings(@{key:value});
 }
-- (void)selfShadow:(NSMenuItem *)item {
-    if(core_comparison_active)[self compare:nil];
-    override_volume(@"HGCharacterVolume",@{@"enabled":@(!character_shadow_override_enabled),@"remember":@YES},false);
-}
-- (void)resolution:(NSMenuItem *)item {display_control(item.representedObject);}
-- (void)quality:(NSMenuItem *)item {display_control(@{@"preset":item.representedObject});}
-- (void)upscaler:(NSMenuItem *)item {display_upscaler(@{@"mode":item.representedObject,@"remember":@YES});}
-- (void)lod:(NSMenuItem *)item {scene_lod_control(@{@"profile":item.representedObject,@"remember":@YES});}
-- (void)shadowResolution:(NSMenuItem *)item {
-    if(core_comparison_active)[self compare:nil];
-    core_shadow_resolution([item.representedObject intValue],true);
-}
-- (void)keyboard:(NSMenuItem *)item {
-    bool enable=input_auto_monitor==nil;
-    if(!enable){
-        input_buttons(false);input_move(false);input_bridge(false,false);input_capture(false);
-        select_input_mode(@"touch");
-    }
-    input_auto_configure(@{@"enabled":@(enable)});
+- (void)lighting:(id)sender {
+    bool enable=!(native_lighting_any() || character_shadow_override_enabled);
+    bmf_request_settings(@{@"gtao":@(enable),@"contact":@(enable),@"selfShadow":@(enable),@"characterLighting":@(enable),@"ssr":@(enable && [bmf_settings[@"ssr"] boolValue])});
 }
 - (void)menuNeedsUpdate:(NSMenu *)menu {
-    bool ready=input_scene_is_ready();
     for(NSMenuItem *item in menu.itemArray){
-        if(item.tag==1){item.enabled=ready;item.state=character_shadow_override_enabled ? NSControlStateValueOn : NSControlStateValueOff;}
-        if(item.tag==2)item.state=input_auto_monitor ? NSControlStateValueOn : NSControlStateValueOff;
+        if(item.tag==1){item.enabled=input_scene_is_loaded();item.state=(native_lighting_any() || character_shadow_override_enabled) ? NSControlStateValueOn : NSControlStateValueOff;}
         if(item.tag==3)item.title=display_last_result;
-        if(item.tag==4){item.enabled=ready;item.title=core_comparison_active ? @"光影对比：恢复增强设置" : @"光影对比：临时切回原生";}
-        if(item.action==@selector(upscaler:)){
-            NSString *selected=atomic_load(&native_temporal_enabled) ? (atomic_load(&native_spatial_enabled) ? @"metalfx-spatial" : @"metalfx-native") : @"taau";
-            item.state=[item.representedObject isEqual:selected] ? NSControlStateValueOn : NSControlStateValueOff;item.enabled=ready;
-        }
-        if(item.action==@selector(lod:)){
-            item.enabled=scene_lod_is_ready();item.state=[item.representedObject isEqual:scene_lod_selected_profile()] ? NSControlStateValueOn : NSControlStateValueOff;
+        if(item.tag==4){item.enabled=input_scene_is_loaded();item.title=core_comparison_active ? @"画面对比：恢复增强设置" : @"画面对比：切回原生设置";}
+        if(item.action==@selector(feature:)){
+            NSDictionary *entry=item.representedObject;id selected=bmf_settings[entry[@"key"]];
+            item.state=(entry[@"value"] ? [entry[@"value"] isEqual:selected] : [selected boolValue]) ? NSControlStateValueOn : NSControlStateValueOff;
         }
     }
 }
 @end
 static BMFMenu *core_menu;
 static id core_comparison_shortcut;
-static NSMenu *core_submenu(NSMenu *root,NSString *title) {
-    NSMenu *menu=[[NSMenu alloc] initWithTitle:title];menu.autoenablesItems=NO;menu.delegate=core_menu;
-    [root addItemWithTitle:title action:NULL keyEquivalent:@""].submenu=menu;return menu;
-}
-static void core_item(NSMenu *menu,NSString *title,SEL action,id value) {
-    NSMenuItem *item=[menu addItemWithTitle:title action:action keyEquivalent:@""];item.target=core_menu;item.representedObject=value;
-}
 static void install_core_menu(void) {
-    core_menu=[BMFMenu new];NSMenu *menu=[[NSMenu alloc] initWithTitle:@"画面"];
+    core_menu=[BMFMenu new];NSMenu *menu=[[NSMenu alloc] initWithTitle:@"BetterMacField"];
     menu.delegate=core_menu;menu.autoenablesItems=NO;
-    core_item(menu,@"角色自阴影",@selector(selfShadow:),nil);menu.itemArray.lastObject.tag=1;
-    NSMenu *shadows=core_submenu(menu,@"阴影精度");
-    core_item(shadows,@"游戏默认",@selector(shadowResolution:),@0);
-    core_item(shadows,@"1024",@selector(shadowResolution:),@1024);
-    core_item(shadows,@"2048",@selector(shadowResolution:),@2048);
-    NSMenu *resolution=core_submenu(menu,@"输出分辨率");
-    for(NSNumber *n in @[@720,@1080,@1440,@2160]){
-        int h=n.intValue,w=h*16/9;core_item(resolution,[NSString stringWithFormat:@"%d × %d",w,h],@selector(resolution:),@{@"width":@(w),@"height":@(h)});
+    NSMenuItem *master=[menu addItemWithTitle:@"增强光影总开关" action:@selector(lighting:) keyEquivalent:@""];
+    master.target=core_menu;master.tag=1;
+    NSMutableDictionary *pages=[NSMutableDictionary dictionary];
+    for(NSDictionary *field in bmf_field_catalog[@"fields"]){
+        if([field[@"key"] isEqual:@"metalHUD"])continue;
+        NSMenu *page=pages[field[@"page"]];
+        if(!page){page=[[NSMenu alloc] initWithTitle:field[@"page"]];page.delegate=core_menu;page.autoenablesItems=NO;pages[field[@"page"]]=page;
+            [menu addItemWithTitle:field[@"page"] action:NULL keyEquivalent:@""].submenu=page;}
+        if(field[@"choices"]){
+            NSMenu *choices=[[NSMenu alloc] initWithTitle:field[@"title"]];choices.delegate=core_menu;choices.autoenablesItems=NO;
+            [page addItemWithTitle:field[@"title"] action:NULL keyEquivalent:@""].submenu=choices;
+            for(NSDictionary *option in field[@"choices"]){
+                NSMenuItem *item=[choices addItemWithTitle:option[@"title"] action:@selector(feature:) keyEquivalent:@""];item.target=core_menu;
+                item.representedObject=@{@"key":field[@"key"],@"value":option[@"value"]};item.toolTip=field[@"help"];
+            }
+        }else{
+            NSMenuItem *item=[page addItemWithTitle:field[@"title"] action:@selector(feature:) keyEquivalent:@""];item.target=core_menu;
+            item.representedObject=@{@"key":field[@"key"]};item.toolTip=field[@"help"];
+        }
     }
-    NSMenu *quality=core_submenu(menu,@"超分质量");
-    for(NSArray *p in display_quality_presets())core_item(quality,p[0],@selector(quality:),p[0]);
-    NSMenu *aa=core_submenu(menu,@"画质提升");
-    core_item(aa,@"TAAU（原版）",@selector(upscaler:),@"taau");
-    core_item(aa,@"MetalFX Temporal＋原生环境光",@selector(upscaler:),@"metalfx-native");
-    core_item(aa,@"MetalFX Spatial＋原生环境光（备选）",@selector(upscaler:),@"metalfx-spatial");
-    aa.itemArray.lastObject.toolTip=@"沿用原版 TAAU 抗锯齿，已观察到移动拖影；建议优先 Temporal。";
-    NSMenu *lod=core_submenu(menu,@"LOD 加载距离");
-    for(NSArray *p in @[@[@"手机默认",@"restore"],@[@"PC 中档",@"pc-medium"],@[@"PC 高档",@"pc-high"]])core_item(lod,p[0],@selector(lod:),p[1]);
     [menu addItem:NSMenuItem.separatorItem];
-    core_item(menu,@"光影对比：临时切回原生",@selector(compare:),nil);
-    NSMenuItem *comparison=menu.itemArray.lastObject;comparison.tag=4;
-    comparison.keyEquivalent=[NSString stringWithFormat:@"%C",(unichar)NSF11FunctionKey];comparison.keyEquivalentModifierMask=0;
-    comparison.toolTip=@"F11 或 ⌘⇧G 临时恢复游戏默认阴影，再按恢复原增强设置；分辨率、超分、LOD 和模型保持当前状态。";
-    core_item(menu,@"自动键鼠模式",@selector(keyboard:),nil);menu.itemArray.lastObject.tag=2;
-    core_item(menu,display_last_result,NULL,nil);menu.itemArray.lastObject.tag=3;
+    NSMenuItem *comparison=[menu addItemWithTitle:@"画面对比：切回原生设置" action:@selector(compare:) keyEquivalent:@"g"];
+    comparison.target=core_menu;comparison.tag=4;comparison.keyEquivalentModifierMask=NSEventModifierFlagCommand;
+    comparison.toolTip=@"再次按下恢复切换前的设置。";
+    [menu addItemWithTitle:display_last_result action:NULL keyEquivalent:@""].tag=3;
     [NSApp.mainMenu addItemWithTitle:@"BetterMacField" action:NULL keyEquivalent:@""].submenu=menu;
     core_comparison_shortcut=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event){
         NSEventModifierFlags flags=event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagControl);
-        if(NSApp.isActive && ((event.keyCode==103 && flags==0) || (event.keyCode==5 && flags==(NSEventModifierFlagCommand|NSEventModifierFlagShift)))){
-            if(!event.isARepeat)[core_menu compare:nil];
-            return nil;
-        }
-        return event;
+        if(NSApp.isActive && event.keyCode==5 && flags==NSEventModifierFlagCommand){
+            if(!event.isARepeat)bmf_compare();return nil;
+        }return event;
     }];
     fprintf(output,"menu=installed\n");
 }
-
-/* Local diagnostics/control is limited to the same published menu features. */
+static void core_status(NSString *identifier) {
+    NSDictionary *state=@{@"id":identifier ?: @"",@"pid":@(getpid()),@"updatedAt":@(NSDate.date.timeIntervalSince1970),
+        @"sceneReady":@(input_scene_is_loaded()),@"selfShadow":@(character_shadow_override_enabled),@"shadowResolution":@(core_shadow_current),
+        @"comparisonBaseline":@(core_comparison_active),
+        @"effective":@{@"upscaler":bmf_upscaler_mode(),@"renderScale":display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"] ?: @0,@"lod":scene_lod_selected_profile()},
+        @"metalFX":native_temporal_state(),@"lighting":bmf_lighting_state(),
+        @"gtaoEncodes":@(atomic_load(&official_gtao_encodes)),@"gtaoErrors":@(atomic_load(&official_gtao_errors)),
+        @"contactEncodes":@(atomic_load(&official_contact_encodes)),@"contactErrors":@(atomic_load(&official_contact_errors)),
+        @"lightingPrograms":@(atomic_load(&metal_ao_compiled)),@"characterPrograms":@(atomic_load(&character_skin_compiled)),
+        @"keyboard":@(input_auto_monitor!=nil),@"settingsPending":@(bmf_settings_pending),@"settingsResult":bmf_settings_result,
+        @"message":display_last_result,@"settings":bmf_settings ?: @{}};
+    [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil]
+        writeToFile:runtime_path(@"bettermacfield-status.json") atomically:YES];
+}
 static void core_command(void) {
-    static NSString *last;
+    static NSString *last;static int ticks;
     NSData *data=[NSData dataWithContentsOfFile:runtime_path(@"bettermacfield-command.json")];
     NSDictionary *command=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    if(![command isKindOfClass:NSDictionary.class] || ![command[@"id"] isKindOfClass:NSString.class] || [last isEqual:command[@"id"]])return;
+    if(![command isKindOfClass:NSDictionary.class] || ![command[@"id"] isKindOfClass:NSString.class] || [last isEqual:command[@"id"]]){
+        if(++ticks%3==0)core_status(last);return;
+    }
     last=command[@"id"];NSString *op=command[@"op"];
-    if([op isEqual:@"upscaler"])display_upscaler(command);
+    if([op isEqual:@"configure"])bmf_request_settings(command[@"settings"] ?: @{});
+    else if([op isEqual:@"upscaler"])display_upscaler(command);
     else if([op isEqual:@"display"])display_control(command);
     else if([op isEqual:@"scene-lod"])scene_lod_control(command);
     else if([op isEqual:@"shadow"])override_volume(@"HGCharacterVolume",command,false);
     else if([op isEqual:@"shadow-resolution"])core_shadow_resolution([command[@"value"] intValue],true);
     else if([op isEqual:@"settings"])game_settings(command);
-    else if([op isEqual:@"compare"])[core_menu compare:nil];
+    else if([op isEqual:@"compare"])bmf_compare();
     else if(![op isEqual:@"status"])return;
-    NSDictionary *state=@{@"id":last,@"pid":@(getpid()),@"sceneReady":@(input_scene_is_ready()),
-        @"selfShadow":@(character_shadow_override_enabled),@"shadowResolution":@(core_shadow_current),
-        @"comparisonBaseline":@(core_comparison_active),@"metalFX":native_temporal_state(),
-        @"keyboard":@(input_auto_monitor!=nil),@"display":display_state()};
-    [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil]
-        writeToFile:runtime_path(@"bettermacfield-status.json") atomically:YES];
+    core_status(last);
 }

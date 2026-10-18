@@ -56,95 +56,317 @@ static NSString *argument(NSArray *arguments,NSString *key) {
     NSUInteger index=[arguments indexOfObject:key];
     return index!=NSNotFound && index+1<arguments.count ? arguments[index+1] : nil;
 }
+static NSDictionary *packageInfo(void) {return readJSON([NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"clients.json"]);}
+static NSString *stateRoot(void) {return [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/BetterMacField"];}
+static NSString *clientPath(NSString *region) {
+    NSString *bundle=packageInfo()[@"clients"][region][@"bundleID"];
+    return [NSHomeDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"Library/Containers/io.playcover.PlayCover/Applications/%@.app",bundle]];
+}
+static NSString *runtimeRoot(NSString *region) {
+    return [NSHomeDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"Library/Containers/%@/Data/tmp/BetterMacField",packageInfo()[@"clients"][region][@"bundleID"]]];
+}
+static NSString *preferencesPath(NSString *region) {return [stateRoot() stringByAppendingPathComponent:[NSString stringWithFormat:@"settings-%@.json",region]];}
+static NSDictionary *catalog(void) {return readJSON([NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"features.json"]);}
+static NSDictionary *loadSettings(NSString *region) {
+    NSMutableDictionary *v=[NSMutableDictionary dictionary];
+    for(NSDictionary *field in catalog()[@"fields"])v[field[@"key"]]=field[@"default"];
+    [v addEntriesFromDictionary:readJSON(preferencesPath(region)) ?: @{}];return v;
+}
+static NSString *restoreRecord(NSString *region) {return [stateRoot() stringByAppendingPathComponent:[region isEqual:@"cn"] ? @"playcover-settings-cn.json" : @"playcover-settings.json"];}
+static void validatePackage(NSString *region,NSString *appPath) {
+    NSDictionary *package=packageInfo(),*client=package[@"clients"][region];
+    if(!client)fail(@"启动器缺少客户端配置。");
+    NSDictionary *info=[NSDictionary dictionaryWithContentsOfFile:[appPath stringByAppendingPathComponent:@"Info.plist"]];
+    if(!info)fail(@"没有找到客户端。请先在 PlayCover 安装对应服的 IPA，并启动游戏下载完资料。");
+    if(![info[@"CFBundleIdentifier"] isEqual:client[@"bundleID"]] || ![info[@"CFBundleShortVersionString"] isEqual:client[@"version"]])
+        fail(@"客户端版本不匹配。此包支持 iOS 1.6.3 的指定构建，请使用对应版本的 BetterMacField。");
+    for(NSString *relative in client[@"files"])
+        if(![sha256([appPath stringByAppendingPathComponent:relative]) isEqual:client[@"files"][relative]])
+            fail([@"客户端文件已改变，需要重新适配：" stringByAppendingString:relative]);
+    NSString *resources=NSBundle.mainBundle.resourcePath;
+    if(![sha256([resources stringByAppendingPathComponent:@"libBetterMacField.dylib"]) isEqual:package[@"runtimeSHA256"]])fail(@"增强模块校验失败，请重新获取完整安装包。");
+    for(NSString *relative in package[@"payload"])
+        if(![sha256([resources stringByAppendingPathComponent:relative]) isEqual:package[@"payload"][relative]])fail([@"画质组件校验失败：" stringByAppendingString:relative]);
+}
+static void stopClient(NSString *region,BOOL restart) {
+    NSString *bundle=packageInfo()[@"clients"][region][@"bundleID"];
+    NSArray *running=[NSRunningApplication runningApplicationsWithBundleIdentifier:bundle];
+    if(running.count && !restart)fail(@"游戏正在运行。请先退出游戏，再从 Launcher 启动以加载当前版本。");
+    for(NSRunningApplication *app in running)[app terminate];
+    NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:8];
+    for(NSRunningApplication *app in running){
+        while(!app.terminated && deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
+        if(!app.terminated)fail(@"游戏未能退出，请手动关闭后重试。");
+    }
+}
+static NSString *prepareRuntime(NSString *region,NSString *appPath,NSDictionary *settings) {
+    NSString *runtime=runtimeRoot(region),*resources=NSBundle.mainBundle.resourcePath;directory(runtime);
+    NSMutableDictionary *files=[packageInfo()[@"payload"] mutableCopy];files[@"libBetterMacField.dylib"]=packageInfo()[@"runtimeSHA256"];
+    for(NSString *relative in files){
+        NSString *name=[relative hasPrefix:@"Graphics/"] ? [relative substringFromIndex:9] : relative;
+        NSString *target=[runtime stringByAppendingPathComponent:name];directory(target.stringByDeletingLastPathComponent);
+        NSData *data=[NSData dataWithContentsOfFile:[resources stringByAppendingPathComponent:relative]];
+        if([relative.pathExtension isEqual:@"json"]){
+            NSString *json=[[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+            // JSON-escape the runtime prefix before substituting its value.
+            NSData *encoded=[NSJSONSerialization dataWithJSONObject:@[runtime] options:0 error:nil];
+            NSString *escaped=[[NSString alloc] initWithData:encoded encoding:NSUTF8StringEncoding];
+            escaped=[escaped substringWithRange:NSMakeRange(2,escaped.length-4)];
+            data=[[json stringByReplacingOccurrencesOfString:@"${RUNTIME}" withString:escaped] dataUsingEncoding:NSUTF8StringEncoding];
+        }
+        NSError *error=nil;if(![data writeToFile:target options:NSDataWritingAtomic error:&error])fail(error.localizedDescription ?: @"无法写入画质组件");
+    }
+    writeJSON(settings,[runtime stringByAppendingPathComponent:@"bettermacfield-settings.json"]);
+    for(NSString *name in @[@"bettermacfield-command.json",@"bettermacfield-status.json"])
+        [NSFileManager.defaultManager removeItemAtPath:[runtime stringByAppendingPathComponent:name] error:nil];
+    displaySettings(appPath,restoreRecord(region),packageInfo()[@"displaySettings"],NO);
+    return runtime;
+}
+static void launchClient(NSString *region,NSString *appPath,NSString *runtime,NSDictionary *settings,void (^done)(NSError *)) {
+    NSString *library=[runtime stringByAppendingPathComponent:@"libBetterMacField.dylib"];
+    NSWorkspaceOpenConfiguration *configuration=[NSWorkspaceOpenConfiguration configuration];
+    configuration.createsNewApplicationInstance=YES;configuration.activates=YES;
+    BOOL hud=[settings[@"metalHUD"] boolValue];configuration.arguments=@[@"-MetalForceHudEnabled",hud ? @"YES" : @"NO"];
+    configuration.environment=@{@"DYLD_INSERT_LIBRARIES":library,@"BMF_RUNTIME_DIR":runtime,
+        @"MTL_HUD_ENABLED":hud ? @"1" : @"0",@"MTL_HUD_DISABLE_MENU_BAR":@"0",
+        @"ENDFIELD_AO_PATCHES_PATH":[runtime stringByAppendingPathComponent:@"endfield-ios-ao-patches.json"],
+        @"ENDFIELD_CHARACTER_SKIN_PATH":[runtime stringByAppendingPathComponent:@"endfield-ios-character-skin.json"],
+        @"ENDFIELD_OFFICIAL_GTAO_PATH":[runtime stringByAppendingPathComponent:@"endfield-official-gtao"]};
+    [NSWorkspace.sharedWorkspace openApplicationAtURL:[NSURL fileURLWithPath:appPath] configuration:configuration completionHandler:^(NSRunningApplication *app,NSError *error){dispatch_async(dispatch_get_main_queue(),^{done(error);});}];
+}
+static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
+    NSTextField *v=[NSTextField wrappingLabelWithString:text];v.font=bold ? [NSFont boldSystemFontOfSize:size] : [NSFont systemFontOfSize:size];return v;
+}
+@interface BMFLauncher : NSObject<NSApplicationDelegate,NSWindowDelegate>
+@property NSWindow *window;
+@property NSPopUpButton *regions;
+@property NSMutableDictionary<NSString *,NSControl *> *controls;
+@property NSTextField *status;
+@property NSTextView *details;
+@property NSButton *launchButton;
+@property NSButton *applyButton;
+@property NSButton *compareButton;
+@property NSTimer *timer;
+@property BOOL dirty;
+@property BOOL busy;
+@property NSString *lastSettingsFingerprint;
+@property NSString *pendingRequest;
+@end
+@implementation BMFLauncher
+- (NSString *)region {return self.regions.indexOfSelectedItem==1 ? @"cn" : @"global";}
+- (NSDictionary *)settings {
+    NSMutableDictionary *v=[NSMutableDictionary dictionary];
+    for(NSString *key in self.controls){
+        NSControl *control=self.controls[key];
+        if([control isKindOfClass:NSPopUpButton.class])v[key]=((NSPopUpButton *)control).selectedItem.representedObject;
+        else v[key]=@(((NSButton *)control).state==NSControlStateValueOn);
+    }return v;
+}
+- (void)showSettings:(NSDictionary *)values {
+    for(NSString *key in self.controls){
+        NSControl *control=self.controls[key];id value=values[key];
+        if([control isKindOfClass:NSPopUpButton.class]){
+            NSPopUpButton *popup=(id)control;
+            for(NSMenuItem *item in popup.itemArray)if([item.representedObject isEqual:value])[popup selectItem:item];
+        }else ((NSButton *)control).state=[value boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+    }
+}
+- (void)changed:(id)sender {self.dirty=YES;self.status.stringValue=@"设置未保存";}
+- (void)regionChanged:(id)sender {
+    [NSUserDefaults.standardUserDefaults setObject:self.region forKey:@"SelectedRegion"];
+    [self showSettings:loadSettings(self.region)];self.dirty=NO;self.lastSettingsFingerprint=nil;[self refresh:nil];
+}
+- (void)error:(NSString *)message {self.status.stringValue=message;self.details.string=message;}
+- (NSButton *)button:(NSString *)title action:(SEL)action frame:(NSRect)frame parent:(NSView *)parent {
+    NSButton *b=[NSButton buttonWithTitle:title target:self action:action];b.frame=frame;[parent addSubview:b];return b;
+}
+- (void)experimentalUnavailable:(id)sender {
+    NSAlert *alert=[[NSAlert alloc] init];alert.messageText=@"暂未开放";
+    [alert addButtonWithTitle:@"知道了"];
+    [alert beginSheetModalForWindow:self.window completionHandler:nil];
+}
+- (BOOL)confirmUsage {
+    if([NSUserDefaults.standardUserDefaults boolForKey:@"SkipInjectionRiskNotice"])return YES;
+    NSAlert *alert=[[NSAlert alloc] init];alert.alertStyle=NSAlertStyleWarning;
+    alert.messageText=@"使用前请阅读";
+    alert.informativeText=@"BetterMacField 在 PlayCover 基础上额外注入增强模块，可能增加账号被封禁的风险。请自行评估后决定是否使用。";
+    NSButton *accept=[alert addButtonWithTitle:@"使用（10 秒）"];accept.enabled=NO;
+    [alert addButtonWithTitle:@"不使用"].keyEquivalent=@"\e";
+    alert.showsSuppressionButton=YES;alert.suppressionButton.title=@"下次不提示";
+    NSTimeInterval deadline=NSProcessInfo.processInfo.systemUptime+10.0;
+    NSTimer *timer=[NSTimer timerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *tick){
+        NSInteger remaining=(NSInteger)ceil(MAX(0.0,deadline-NSProcessInfo.processInfo.systemUptime));
+        accept.title=remaining ? [NSString stringWithFormat:@"使用（%ld 秒）",(long)remaining] : @"使用";
+        accept.enabled=(remaining==0);
+    }];
+    [NSRunLoop.mainRunLoop addTimer:timer forMode:NSModalPanelRunLoopMode];
+    [NSApp activateIgnoringOtherApps:YES];
+    NSModalResponse response=[alert runModal];[timer invalidate];
+    if(response!=NSAlertFirstButtonReturn)return NO;
+    if(alert.suppressionButton.state==NSControlStateValueOn)
+        [NSUserDefaults.standardUserDefaults setBool:YES forKey:@"SkipInjectionRiskNotice"];
+    return YES;
+}
+- (void)applicationDidFinishLaunching:(NSNotification *)note {
+    if(![self confirmUsage]){[NSApp terminate:nil];return;}
+    self.controls=[NSMutableDictionary dictionary];
+    self.window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,780,660) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable backing:NSBackingStoreBuffered defer:NO];
+    self.window.title=@"BetterMacField";self.window.delegate=self;self.window.releasedWhenClosed=NO;
+    NSView *root=self.window.contentView;
+    NSTextField *title=label(@"BetterMacField",26,YES);title.frame=NSMakeRect(28,604,450,36);[root addSubview:title];
+    NSTextField *sub=label(@"终末地 · macOS 增强工具",13,NO);sub.textColor=NSColor.secondaryLabelColor;sub.frame=NSMakeRect(30,577,580,22);[root addSubview:sub];
+    self.regions=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(570,604,180,30) pullsDown:NO];[self.regions addItemsWithTitles:@[@"国际服 · 1.6.3",@"国服 · 1.6.3"]];
+    self.regions.target=self;self.regions.action=@selector(regionChanged:);[root addSubview:self.regions];
+    if(![[NSUserDefaults.standardUserDefaults stringForKey:@"SelectedRegion"] isEqual:@"global"])[self.regions selectItemAtIndex:1];
+    NSTabView *tabs=[[NSTabView alloc] initWithFrame:NSMakeRect(24,136,732,432)];[root addSubview:tabs];
+    for(NSString *name in @[@"画面",@"光影",@"操作",@"实验性功能",@"状态与恢复"]){
+        NSTabViewItem *tab=[[NSTabViewItem alloc] initWithIdentifier:name];tab.label=name;
+        NSView *page=[[NSView alloc] initWithFrame:NSMakeRect(0,0,706,388)];tab.view=page;[tabs addTabViewItem:tab];
+        if([name isEqual:@"实验性功能"]){
+            CGFloat y=320;
+            for(NSString *title in @[@"替换PC版角色高模",@"使用EFMIMOD"]){
+                NSButton *button=[self button:title action:@selector(experimentalUnavailable:) frame:NSMakeRect(18,y,300,38) parent:page];
+                button.attributedTitle=[[NSAttributedString alloc] initWithString:title attributes:@{NSForegroundColorAttributeName:NSColor.disabledControlTextColor}];
+                button.toolTip=@"暂未开放";
+                y-=58;
+            }
+            continue;
+        }
+        if([name isEqual:@"状态与恢复"]){
+            NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:NSMakeRect(16,92,672,278)];scroll.hasVerticalScroller=YES;scroll.borderType=NSBezelBorder;
+            self.details=[[NSTextView alloc] initWithFrame:scroll.bounds];self.details.editable=NO;self.details.font=[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];self.details.autoresizingMask=NSViewWidthSizable;scroll.documentView=self.details;[page addSubview:scroll];
+            [self button:@"校验客户端与组件" action:@selector(check:) frame:NSMakeRect(16,48,175,30) parent:page];
+            [self button:@"复制运行日志" action:@selector(copyLog:) frame:NSMakeRect(203,48,150,30) parent:page];
+            [self button:@"恢复 PlayCover 设置" action:@selector(restore:) frame:NSMakeRect(365,48,190,30) parent:page];
+            NSTextField *help=label(@"恢复本工具修改的 PlayCover 设置。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
+        }
+        CGFloat y=362;
+        for(NSDictionary *field in catalog()[@"fields"]){
+            if(![field[@"page"] isEqual:name])continue;
+            NSString *key=field[@"key"];
+            if(field[@"choices"]){
+                NSTextField *caption=label(field[@"title"],13,YES);caption.frame=NSMakeRect(18,y-6,180,24);[page addSubview:caption];
+                NSPopUpButton *popup=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(224,y-7,452,28) pullsDown:NO];
+                for(NSDictionary *choice in field[@"choices"]){[popup addItemWithTitle:choice[@"title"]];popup.lastItem.representedObject=choice[@"value"];}
+                popup.target=self;popup.action=@selector(changed:);[page addSubview:popup];self.controls[key]=popup;
+            }else{
+                NSButton *toggle=[NSButton checkboxWithTitle:field[@"title"] target:self action:@selector(changed:)];toggle.frame=NSMakeRect(18,y-6,650,24);[page addSubview:toggle];self.controls[key]=toggle;
+            }
+            NSString *text=field[@"help"];if(text.length){NSTextField *help=label(text,11,NO);help.textColor=NSColor.secondaryLabelColor;help.frame=NSMakeRect(20,y-36,660,26);[page addSubview:help];}
+            y-=([name isEqual:@"画面"] ? 72 : 51);
+        }
+
+    }
+    self.status=label(@"准备就绪",12,NO);self.status.frame=NSMakeRect(30,84,720,40);[root addSubview:self.status];
+    self.compareButton=[self button:@"画面对比 · ⌘G" action:@selector(compare:) frame:NSMakeRect(28,30,170,36) parent:root];
+    self.applyButton=[self button:@"保存并应用" action:@selector(apply:) frame:NSMakeRect(432,30,145,36) parent:root];
+    self.launchButton=[self button:@"启动游戏" action:@selector(launch:) frame:NSMakeRect(590,30,160,36) parent:root];self.launchButton.keyEquivalent=@"\r";
+    [self regionChanged:nil];[self.window center];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
+    self.timer=[NSTimer scheduledTimerWithTimeInterval:3 target:self selector:@selector(refresh:) userInfo:nil repeats:YES];
+
+}
+- (void)save {directory(stateRoot());writeJSON(self.settings,preferencesPath(self.region));self.dirty=NO;}
+- (void)send:(NSString *)op settings:(NSDictionary *)settings {
+    NSString *root=runtimeRoot(self.region);directory(root);
+    self.pendingRequest=NSUUID.UUID.UUIDString;
+    writeJSON(@{@"id":self.pendingRequest,@"op":op,@"settings":settings ?: @{}},[root stringByAppendingPathComponent:@"bettermacfield-command.json"]);
+}
+- (void)apply:(id)sender {
+    @try{[self save];[self send:@"configure" settings:self.settings];self.status.stringValue=@"设置已保存。Metal HUD 在下次启动生效。";}
+    @catch(NSException *e){[self error:e.reason];}
+}
+- (void)compare:(id)sender {@try{[self send:@"compare" settings:nil];}@catch(NSException *e){[self error:e.reason];}}
+- (void)busy:(BOOL)value {
+    self.busy=value;self.launchButton.enabled=!value;self.applyButton.enabled=!value;self.regions.enabled=!value;
+}
+- (void)runCheck:(BOOL)launch {
+    if(self.busy)return;
+    NSString *region=self.region,*path=clientPath(region);NSDictionary *settings=self.settings;
+    @try{if(launch)[self save];}@catch(NSException *e){[self error:e.reason];return;}
+    [self busy:YES];self.status.stringValue=@"正在校验客户端与画质组件…";
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+        NSString *failure=nil,*runtime=nil;
+        @try {validatePackage(region,path);if(launch){stopClient(region,NO);runtime=prepareRuntime(region,path,settings);}}
+        @catch(NSException *e){failure=e.reason;}
+        dispatch_async(dispatch_get_main_queue(),^{
+            if(failure){[self busy:NO];[self error:failure];return;}
+            if(!launch){[self busy:NO];self.status.stringValue=@"客户端与全部画质组件校验通过。";return;}
+            self.status.stringValue=@"正在启动游戏；登录进入场景后自动应用设置…";
+            launchClient(region,path,runtime,settings,^(NSError *error){[self busy:NO];if(error)[self error:error.localizedDescription];});
+        });
+    });
+}
+- (void)launch:(id)sender {[self runCheck:YES];}
+- (void)check:(id)sender {[self runCheck:NO];}
+- (void)restore:(id)sender {
+    @try {
+        if([NSRunningApplication runningApplicationsWithBundleIdentifier:packageInfo()[@"clients"][self.region][@"bundleID"]].count)fail(@"请先关闭游戏，再恢复 PlayCover 设置。");
+        displaySettings(clientPath(self.region),restoreRecord(self.region),packageInfo()[@"displaySettings"],YES);
+        self.status.stringValue=@"PlayCover 设置已恢复。";
+    }@catch(NSException *e){[self error:e.reason];}
+}
+- (void)copyLog:(id)sender {
+    NSString *text=[NSString stringWithContentsOfFile:[runtimeRoot(self.region) stringByAppendingPathComponent:@"bettermacfield-runtime.log"] encoding:NSUTF8StringEncoding error:nil];
+    if(!text){self.status.stringValue=@"尚无运行日志。";return;}
+    [NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:text forType:NSPasteboardTypeString];self.status.stringValue=@"运行日志已复制。";
+}
+- (void)refresh:(id)sender {
+    if(self.busy)return;
+    NSString *region=self.region,*runtime=runtimeRoot(region),*bundle=packageInfo()[@"clients"][region][@"bundleID"];
+    NSArray<NSRunningApplication *> *apps=[NSRunningApplication runningApplicationsWithBundleIdentifier:bundle];
+    NSDictionary *state=readJSON([runtime stringByAppendingPathComponent:@"bettermacfield-status.json"]);
+    BOOL live=NO;for(NSRunningApplication *app in apps)if(app.processIdentifier==[state[@"pid"] intValue] && NSDate.date.timeIntervalSince1970-[state[@"updatedAt"] doubleValue]<12)live=YES;
+    self.compareButton.enabled=live && [state[@"sceneReady"] boolValue];
+    self.launchButton.enabled=!apps.count;
+    NSString *prefix=apps.count ? (live ? @"增强模块已连接" : @"游戏运行中 · 等待增强模块连接") : @"游戏未运行";
+    if(!self.dirty)self.status.stringValue=[NSString stringWithFormat:@"%@%@",prefix,live ? [@" · " stringByAppendingString:state[@"settingsResult"] ?: @"就绪"] : @""];
+    BOOL acknowledged=!self.pendingRequest || ([self.pendingRequest isEqual:state[@"id"]] && ![state[@"settingsPending"] boolValue]);
+    if(acknowledged)self.pendingRequest=nil;
+    if(live && acknowledged && !self.dirty && [state[@"settings"] isKindOfClass:NSDictionary.class]){
+        NSString *fingerprint=[state[@"settings"] description];
+        if(![fingerprint isEqual:self.lastSettingsFingerprint]){
+            self.lastSettingsFingerprint=fingerprint;[self showSettings:state[@"settings"]];
+            @try{directory(stateRoot());writeJSON(state[@"settings"],preferencesPath(region));}@catch(NSException *e){}
+        }
+    }
+    NSMutableString *text=[NSMutableString stringWithFormat:@"%@\n客户端：%@\n版本：1.6.3\n安装位置：%@\n\n",prefix,[region isEqual:@"cn"] ? @"国服" : @"国际服",clientPath(region)];
+    if(live){
+        [text appendFormat:@"场景：%@\n画面对比：%@\nGTAO：%@ 帧 · %@ 错误\n接触阴影：%@ 帧 · %@ 错误\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",[state[@"comparisonBaseline"] boolValue] ? @"原生设置" : @"增强设置",state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
+        NSDictionary *fx=state[@"metalFX"],*effective=state[@"effective"];
+        [text appendFormat:@"超分：%@\nLOD：%@\nMetalFX：%@ 帧 · %@ 错误\n",effective[@"upscaler"] ?: @"—",effective[@"lod"] ?: @"—",fx[@"encodes"] ?: @0,fx[@"errors"] ?: @0];
+    }
+    self.details.string=text;
+}
+- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return YES;}
+@end
 int main(int argc,const char **argv) {
     @autoreleasepool {
         NSArray *args=NSProcessInfo.processInfo.arguments;
-        BOOL check=[args containsObject:@"--check"],restore=[args containsObject:@"--restore-settings"];
-        BOOL commandLine=check || restore || [args containsObject:@"--launch"];
+        BOOL check=[args containsObject:@"--check"],restore=[args containsObject:@"--restore-settings"],launch=[args containsObject:@"--launch"];
+        BOOL commandLine=check || restore || launch;
         @try {
-            NSDictionary *package=readJSON([NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"clients.json"]);
-            if(!package)fail(@"启动器文件不完整，请重新解压完整安装包。");
-            NSDictionary *clients=package[@"clients"];
-            NSString *region=argument(args,@"--region");
-            NSString *root=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Containers/io.playcover.PlayCover/Applications"];
-            if(!region && !commandLine){
-                [NSApplication sharedApplication];[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];[NSApp activateIgnoringOtherApps:YES];
-                NSAlert *alert=[NSAlert new];alert.messageText=@"BetterMacField";
-                alert.informativeText=@"选择已在 PlayCover 安装并下载完资料的客户端。顶部画面菜单提供画质设置；F11 可切换光影对比。";
-                NSButton *restoreOption=[NSButton checkboxWithTitle:@"恢复 PlayCover 设置（需先退出游戏）" target:nil action:NULL];
-                restoreOption.frame=NSMakeRect(0,0,300,24);alert.accessoryView=restoreOption;
-                [alert addButtonWithTitle:@"国际服"];[alert addButtonWithTitle:@"国服"];[alert addButtonWithTitle:@"取消"];
-                NSModalResponse choice=[alert runModal];if(choice==NSAlertThirdButtonReturn)return 0;
-                region=choice==NSAlertSecondButtonReturn ? @"cn" : @"global";
-                restore=restoreOption.state==NSControlStateValueOn;
+            if(!packageInfo() || !catalog())fail(@"启动器文件不完整，请重新解压完整安装包。");
+            if(commandLine){
+                NSString *region=argument(args,@"--region") ?: @"cn";
+                if(!packageInfo()[@"clients"][region])fail(@"未知客户端区域。");
+                NSString *path=argument(args,@"--app") ?: clientPath(region);
+                if(restore){stopClient(region,NO);displaySettings(path,restoreRecord(region),packageInfo()[@"displaySettings"],YES);puts("PlayCover settings restored.");return 0;}
+                validatePackage(region,path);
+                if(check){printf("Verified %s 1.6.3 and all packaged graphics programs.\n",region.UTF8String);return 0;}
+                stopClient(region,[args containsObject:@"--restart"]);
+                NSDictionary *settings=loadSettings(region);NSString *runtime=prepareRuntime(region,path,settings);
+                [NSApplication sharedApplication];
+                launchClient(region,path,runtime,settings,^(NSError *error){if(error)fprintf(stderr,"%s\n",error.localizedDescription.UTF8String);exit(error ? 1 : 0);});[NSApp run];
+            }else{
+                [NSApplication sharedApplication];
+                [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+                NSMenu *main=[NSMenu new],*app=[NSMenu new];NSMenuItem *root=[NSMenuItem new];root.submenu=app;[main addItem:root];
+                [app addItemWithTitle:@"退出 BetterMacField" action:@selector(terminate:) keyEquivalent:@"q"];NSApp.mainMenu=main;
+                BMFLauncher *controller=[BMFLauncher new];NSApp.delegate=controller;[NSApp run];
             }
-            region=region ?: @"global";NSDictionary *client=clients[region];if(!client)fail(@"未知客户端区域。");
-            NSString *bundle=client[@"bundleID"];
-            NSString *appPath=argument(args,@"--app") ?: [root stringByAppendingPathComponent:[bundle stringByAppendingString:@".app"]];
-            NSDictionary *info=[NSDictionary dictionaryWithContentsOfFile:[appPath stringByAppendingPathComponent:@"Info.plist"]];
-            if(!info)fail(@"没有找到客户端。请先在 PlayCover 安装对应服的 IPA，并正常启动、下载完游戏资料。");
-            if(![info[@"CFBundleIdentifier"] isEqual:bundle] || ![info[@"CFBundleShortVersionString"] isEqual:client[@"version"]])
-                fail(@"客户端版本不匹配。此包支持指定构建的 iOS 1.6.3，请等待对应版本的 BetterMacField 更新。");
-            NSString *state=[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/BetterMacField"];
-            NSString *record=[state stringByAppendingPathComponent:[region isEqual:@"cn"] ? @"playcover-settings-cn.json" : @"playcover-settings.json"];
-            NSArray *running=[NSRunningApplication runningApplicationsWithBundleIdentifier:bundle];
-            if(restore){
-                if(running.count)fail(@"请先关闭游戏，再恢复 PlayCover 设置。");
-                displaySettings(appPath,record,package[@"displaySettings"],YES);
-                if(commandLine)puts("PlayCover settings restored.");
-                else{NSAlert *alert=[NSAlert new];alert.messageText=@"PlayCover 设置已恢复";alert.informativeText=@"现在可以从 PlayCover 正常启动游戏。";[alert runModal];}
-                return 0;
-            }
-            for(NSString *relative in client[@"files"]){
-                if(![sha256([appPath stringByAppendingPathComponent:relative]) isEqual:client[@"files"][relative]])
-                    fail([@"客户端文件已改变，需要重新适配：" stringByAppendingString:relative]);
-            }
-            NSString *source=[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"libBetterMacField.dylib"];
-            if(![sha256(source) isEqual:package[@"runtimeSHA256"]])fail(@"增强模块校验失败，请重新获取完整安装包。");
-            if(check){printf("Verified %s 1.6.3 and packaged runtime.\n",bundle.UTF8String);return 0;}
-            if(running.count){
-                BOOL restart=[args containsObject:@"--restart"];
-                if(!commandLine){
-                    NSAlert *alert=[NSAlert new];alert.messageText=@"游戏正在运行";alert.informativeText=@"加载增强模块需要先退出并重新启动这一个客户端。";
-                    [alert addButtonWithTitle:@"退出并重新启动"];[alert addButtonWithTitle:@"取消"];restart=[alert runModal]==NSAlertFirstButtonReturn;
-                    if(!restart)return 0;
-                }
-                if(!restart)fail(@"游戏正在运行，请先退出或使用 --restart。");
-                for(NSRunningApplication *app in running)[app terminate];
-                NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:8];
-                for(NSRunningApplication *app in running){
-                    while(!app.terminated && deadline.timeIntervalSinceNow>0)[NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
-                    if(!app.terminated)fail(@"游戏未能退出，请手动关闭后重试。");
-                }
-            }
-            NSString *runtime=[NSHomeDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"Library/Containers/%@/Data/tmp/BetterMacField",bundle]];
-            directory(runtime);
-            NSString *library=[runtime stringByAppendingPathComponent:@"libBetterMacField.dylib"];
-            NSData *bytes=[NSData dataWithContentsOfFile:source];NSError *error=nil;
-            if(![bytes writeToFile:library options:NSDataWritingAtomic error:&error])fail(error.localizedDescription);
-            displaySettings(appPath,record,package[@"displaySettings"],NO);
-            for(NSString *name in @[@"bettermacfield-command.json",@"bettermacfield-status.json"])
-                [NSFileManager.defaultManager removeItemAtPath:[runtime stringByAppendingPathComponent:name] error:nil];
-            [NSApplication sharedApplication];
-            NSWorkspaceOpenConfiguration *configuration=[NSWorkspaceOpenConfiguration configuration];
-            configuration.createsNewApplicationInstance=YES;configuration.activates=YES;
-            configuration.arguments=@[@"-MetalForceHudEnabled",@"YES"];
-            configuration.environment=@{@"DYLD_INSERT_LIBRARIES":library,@"BMF_RUNTIME_DIR":runtime,@"MTL_HUD_ENABLED":@"1",@"MTL_HUD_DISABLE_MENU_BAR":@"0"};
-            [NSWorkspace.sharedWorkspace openApplicationAtURL:[NSURL fileURLWithPath:appPath] configuration:configuration completionHandler:^(NSRunningApplication *app,NSError *error){
-                dispatch_async(dispatch_get_main_queue(),^{
-                    if(error){
-                        if(commandLine)fprintf(stderr,"Launch failed: %s\n",error.localizedDescription.UTF8String);
-                        else{NSAlert *alert=[NSAlert new];alert.messageText=@"启动失败";alert.informativeText=error.localizedDescription;[alert runModal];}
-                    }
-                    exit(error ? 1 : 0);
-                });
-            }];
-            [NSApp run];
-        }@catch(NSException *exception){
-            if(commandLine)fprintf(stderr,"%s\n",exception.reason.UTF8String);
-            else{[NSApplication sharedApplication];NSAlert *alert=[NSAlert new];alert.messageText=@"BetterMacField";alert.informativeText=exception.reason;[alert runModal];}
-            return 1;
+        }@catch(NSException *e){
+            if(commandLine)fprintf(stderr,"%s\n",e.reason.UTF8String);
+            else{NSAlert *a=[NSAlert new];a.messageText=@"BetterMacField";a.informativeText=e.reason;[a runModal];}return 1;
         }
-    }
-    return 0;
+    }return 0;
 }

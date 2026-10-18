@@ -6,3 +6,12 @@ client implementations; they do not represent ownership of the game.
 Arknights: Endfield game content and trademarks belong to their respective
 rights holders. PlayCover/PlayTools and Apple's Metal/MetalFX remain separate
 components with their own terms. They are not bundled in this repository.
+
+The local full-feature launcher package also contains rendering programs
+prepared from a verified local game export: original GTAO/contact compute
+programs and adapted lighting/character shader programs. These are build
+inputs kept outside the tracked MIT source tree (build/Graphics), and are
+not relicensed under MIT. No models, textures, Unity resource bundles, IPA
+files, or MOD payloads are included in this launcher package. The current
+packaging helper consumes a prepared local export; it is not yet a standalone
+extractor for arbitrary player installations.

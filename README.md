@@ -1,100 +1,143 @@
 # BetterMacField
 
-为通过 PlayCover 运行的《明日方舟：终末地》iOS 客户端补充 macOS 操作、角色阴影与画面控制。支持 **国际服与国服 iOS 1.6.3 的指定构建**，提供源码和无需 Python/Xcode 的原生启动器。
+**0.3.5 · macOS launcher and graphics/input integration for Arknights: Endfield**
 
-## 当前功能
+[English](#english) · [简体中文](#简体中文)
 
-| 功能 | 实现与状态 |
+## English
+
+BetterMacField adds keyboard/mouse integration and graphics controls to the iOS version of **Arknights: Endfield** running through **PlayCover** on Apple Silicon Macs. This source release covers the **0.3.5 launcher** and its runtime integration. It supports the pinned **CN and global iOS 1.6.3 builds**; CN is selected by default, and subsequent region choices are remembered.
+
+### Features
+
+| Page | Available controls |
 | --- | --- |
-| 角色自阴影 | 通过游戏原生 `HGCharacterVolume` 打开角色自阴影质量门槛，使用现有角色与阴影渲染流程 |
-| 阴影精度 | 游戏默认、1024、2048；同时调整场景级联阴影和角色阴影图参数 |
-| MetalFX Temporal | 接入原生 C++ 渲染路径，保留原有环境光；已修正 TAAU 输入与 MetalFX 横向 jitter 符号不一致造成的抖动 |
-| MetalFX Spatial | 保留为备选，位于原版抗锯齿、Bloom、色调映射之后；当前组合仍有移动拖影 |
-| 分辨率与超分档位 | 720p / 1080p / 1440p / 2160p 输出；质量 66.7%、平衡 58.8%、性能 50% 的宽高比例 |
-| LOD 加载距离 | 手机默认、PC 中档、PC 高档；沿用游戏原生 Streaming 加载与释放逻辑 |
-| 键鼠与桌面 HUD | 场景内收到键鼠输入后切换；自由视角、Alt 释放、WASD、攻击/闪避、技能、交互、菜单快捷键和工具转盘 |
-| 窗口与 UI | PlayCover 2× UI 缩放；分辨率菜单驱动 16:9 窗口，超出桌面时按可用面积缩小 |
-| Metal HUD | 调用系统 HUD；完整类型、位置与配置菜单目前在 macOS 27 验证 |
-| 后台帧率 | 失焦后限制到 15 FPS，回到前台恢复原帧率 |
-| 光影对比 | F11 或 ⌘⇧G 临时恢复默认阴影，再按恢复原来的增强设置 |
+| Graphics | 720p–2160p output; native TAAU, MetalFX Spatial and experimental Temporal; 66.7% / 58.8% / 50% rendering scale; sharpening; mobile / PC medium / PC high scene LOD |
+| Lighting | Character self-shadows, character lighting and shadow filtering, shadow resolution, original GTAO, contact shadows, SSR and experimental PC character specular lighting |
+| Input | Keyboard/mouse integration, sprint and combo input handling, tool wheel, camera zoom, interaction selection, optional 15 FPS background limit and Metal HUD |
+| Experimental | Greyed “Replace with PC character high-detail models” and “Use EFMI MOD” placeholders; clicking either shows “Not available yet” |
+| Status & recovery | Client/component verification, runtime status, log copying and restoration of the PlayCover settings changed by this tool |
 
-首版使用玩家已安装的客户端资源。角色模型、高清贴图、MOD、模型提取工具和官方着色器文件均不在本仓库。
+**⌘G** switches between native and enhanced graphics. By default, the native comparison also selects **TAAU at 50% rendering scale and mobile LOD**; either option can be disabled. Press again to restore the captured enhanced settings. Output resolution stays unchanged, and comparison mode does not overwrite saved preferences.
 
-当前实验版的额外 SSAO、接触阴影、SSR、角色 PC 高光/材质着色器还依赖客户端生成资源，留待独立的本地生成流程完善后再接入。这里的“角色自阴影”与上述屏幕空间效果是不同功能。
+The launcher and in-game menu share their settings. CN and global settings are stored separately. The public version has **no UID hiding, MOD loading, model/texture replacement or extraction functionality**. Additional GI experiments and private development features are outside this release.
 
-## 使用打包版
+### Use
 
-在 PlayCover 安装对应服的客户端，先正常启动并下载完游戏资料，然后退出游戏。解压 `BetterMacField-macOS-arm64.zip`，打开 `BetterMacField.app`，选择国际服或国服。加载约 20 秒后顶部出现 **画面** 菜单。
+1. Install a supported IPA through PlayCover, launch it once, finish downloading the game data, then exit the game.
+2. Open a prepared `BetterMacField.app` package. Read the injection-risk notice: “Use” unlocks after **10 seconds**, “Do not use” exits immediately, and “Do not show again” is optional.
+3. Select the region and graphics settings, then launch the game. The packaged app requires no Python, Xcode or terminal.
 
-打包版包含启动器和本项目动态库；玩家仍需自己的 IPA、PlayCover 和游戏资料。源码构建者运行 `python3 build_release.py` 可生成同样的包。当前包采用本地签名，尚未经过 Apple 公证，首次下载打开可能被 macOS 拦截，见 [使用与录制](docs/quickstart.md)。
+The launcher finds PlayCover installations under:
 
-## 从源码构建与启动
-
-需要 Apple Silicon Mac、macOS 13 或更新版本、Xcode Command Line Tools、原生 arm64 Python 3.9+，以及已通过 PlayCover 安装并能正常启动的游戏。完整 Metal HUD 菜单取决于系统版本，其余功能也仍需其他系统版本的实际验证。
-
-```sh
-git clone https://github.com/Shalistera/BetterMacField.git
-cd BetterMacField
-python3 bettermacfield.py check
-python3 bettermacfield.py launch
-# 国服
-python3 bettermacfield.py --region cn launch
+```text
+~/Library/Containers/io.playcover.PlayCover/Applications/
 ```
 
-游戏已经运行时：
+- CN: `com.hypergryph.endfield.app`
+- Global: `com.gryphline.endfield.ios.app`
 
-```sh
-python3 bettermacfield.py launch --restart
-```
+Scroll to zoom the camera. Hold **Option/Alt + scroll** to select interaction entries. Hold **R** to open the tool wheel. Exit the enhanced session and launch directly through PlayCover to use the original client.
 
-安装位置不同时，把 `--app` 放在子命令前：
+BetterMacField adds another injected module on top of PlayCover and **may increase the risk of an account ban**. The launcher displays this notice before use. The app is locally signed and is not Apple-notarized.
 
-```sh
-python3 bettermacfield.py --app '/path/to/com.gryphline.endfield.ios.app' launch
-```
+### Current limits
 
-启动器先检查 UnityFramework 与 IL2CPP metadata 的 SHA-256，编译并临时注入本项目的动态库。加载需要约 20 秒；登录后进入场景，即可使用顶部 **画面** 菜单。PlayTools 继续保留，PlayCover 的触控按键映射关闭，由本项目处理场景键鼠。登录 SDK、内置网页及原生控件继续使用正常鼠标点击。
+- Defaults: **1080p, quality preset, Spatial with the game's native TAAU antialiasing**, character lighting, GTAO and contact shadows. Existing user settings are preserved.
+- The current Spatial combination has motion trails. Temporal is experimental; ANE assertion failures have occurred on macOS 27, and their cause remains unresolved.
+- LOD changes follow the game's streaming and resource lifetime, so already-loaded scenery may not change immediately.
+- Validation primarily used an M1 Max on macOS 27. All maps, characters and macOS versions have not been covered. See [validation notes](docs/validation.md).
 
-首次使用默认沿用游戏 TAAU。进入场景后可选择：
+### Build and source scope
 
-**画面 → 画质提升 → MetalFX Temporal＋原生环境光**
-
-分辨率、超分档位和角色阴影设置会保存；更新客户端后，版本和二进制校验不匹配会拒绝启动增强版。游戏本体、资源包和 PlayTools 文件保持原状。窗口最大尺寸受当前桌面可用空间限制，输出分辨率与窗口点数分别处理。
-
-录制对比时按 **F11**（部分键盘需 Fn+F11），也可按 **⌘⇧G** 或点击“画面 → 光影对比”。再次按键恢复之前的角色自阴影和阴影精度。对比保留输出分辨率、MetalFX、LOD 和资源状态，用来展示阴影增强；完整原版对照请退出后从 PlayCover 启动。临时对比不会保存为下一次启动默认。
-
-## 恢复与排错
-
-直接关闭游戏，再从 PlayCover 正常启动，即可运行不加载本项目动态库的版本。
-
-本工具会将 PlayCover 的 UI 缩放设为 2×，采用菜单控制的窗口比例，并关闭触控按键映射。这几项原设置只保存一份。关闭游戏后恢复：
-
-打包版：重新打开启动器，勾选 **恢复 PlayCover 设置**，再选择对应服。
-
-源码版：
-
-```sh
-python3 bettermacfield.py restore-settings
-python3 bettermacfield.py --region cn restore-settings
-```
-
-诊断命令只读取当前增强进程：
-
-```sh
-python3 bettermacfield.py status
-```
-
-运行日志位于 `~/Library/Containers/<客户端 ID>/Data/tmp/BetterMacField/bettermacfield-runtime.log`。国际服 ID 为 `com.gryphline.endfield.ios`，国服为 `com.hypergryph.endfield`。两服运行文件和设置恢复记录分别保存。报告问题时附客户端版本、macOS 版本、芯片、所选画质模式与相关日志。请自行去除账号等个人信息。
-
-LOD 改回手机档会恢复参数，已经驻留的高精度内容由游戏继续管理，因此画面不一定立即恢复为完全相同的低 LOD 截图。Spatial 的移动拖影已知存在；优先使用 Temporal 或 TAAU。
-
-## 开发
+Requirements: **Apple Silicon, macOS 13+, Xcode Command Line Tools and Python 3.9+**. The source runtime library can be compiled with:
 
 ```sh
 python3 bettermacfield.py build
 python3 -m unittest discover -s tests
 ```
 
-实现边界、更新适配点见 [架构与适配](docs/architecture.md)。当前发布范围与实际验证见 [验证记录](docs/validation.md)。
+A **complete graphics launcher package also requires a prepared local rendering-program export**. Those game-derived shader programs and binding files are not committed to this repository. An independent extraction workflow for arbitrary player installations is not included in 0.3.5.
 
-源码采用 [MIT](LICENSE)；游戏内容、商标和第三方组件的权利仍归各自权利人，参见 [NOTICE](NOTICE)。
+```sh
+python3 prepare_graphics.py /path/to/local-rendering-export
+python3 build_release.py
+# CN is the default; global is explicit:
+python3 bettermacfield.py launch
+python3 bettermacfield.py --region global launch
+```
+
+The build produces `dist/BetterMacField.app`, `dist/BetterMacField-macOS-arm64.zip` and `dist/SHA256SUMS.txt`. The launcher checks exact client and payload identities and rejects unsupported client updates. See [architecture](docs/architecture.md) and [usage notes](docs/quickstart.md) for details; these supporting documents are currently in Chinese.
+
+### License
+
+The project's launcher and integration source are released under [MIT](LICENSE). Game assets, original or adapted game shader programs, IPA files, Unity bundles and MOD payloads are excluded from the tracked source and are not relicensed under MIT. The application icon is included. See [NOTICE](NOTICE) for the boundary between project code and external components.
+
+## 简体中文
+
+BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**》iOS 客户端补充 macOS 键鼠和画面设置。本次开源范围为 **0.3.5 启动器及其运行模块**，适配国服、国际服 **iOS 1.6.3 的指定构建**。首次使用默认国服，之后记住用户选择。
+
+### 功能
+
+| 页面 | 可用功能 |
+| --- | --- |
+| 画面 | 720p–2160p；原版 TAAU、MetalFX Spatial、实验性 Temporal；66.7% / 58.8% / 50% 渲染比例；锐化；手机 / PC 中档 / PC 高档场景 LOD |
+| 光影 | 角色自阴影、角色光照与阴影滤波、阴影精度、原版 GTAO、接触阴影、SSR、实验性角色 PC 高光 |
+| 操作 | 键鼠接入、冲刺与连续技输入处理、工具转盘、镜头缩放、交互项选择、可关闭的后台 15 FPS 限制、Metal HUD |
+| 实验性功能 | “替换PC版角色高模”“使用EFMIMOD”两个灰色占位按钮，点击显示“暂未开放” |
+| 状态与恢复 | 客户端及组件校验、运行状态、复制日志、恢复本工具修改的 PlayCover 设置 |
+
+**⌘G** 切换原生／增强画面。默认同时回退为 **TAAU＋50% 渲染和手机 LOD**，这两项可以分别取消；再按一次恢复先前的增强设置。输出分辨率保持不变，对比状态不会覆盖保存的偏好。
+
+启动器与游戏内菜单共用设置，国服和国际服分别保存。公开版**不包含隐藏 UID、MOD 加载、模型／贴图替换及提取功能**。额外 GI 实验和私人开发功能留在本地。
+
+### 使用
+
+1. 在 PlayCover 安装对应版本 IPA，启动游戏下载完资料后退出。
+2. 打开已打包的 `BetterMacField.app`，阅读注入风险提示。**10 秒**后可点击“使用”；“不使用”立即退出，可勾选“下次不提示”。
+3. 选择服务器和设置，点击“启动游戏”。使用打包应用无需 Python、Xcode 或终端。
+
+默认查找目录为：
+
+```text
+~/Library/Containers/io.playcover.PlayCover/Applications/
+```
+
+- 国服：`com.hypergryph.endfield.app`
+- 国际服：`com.gryphline.endfield.ios.app`
+
+滚轮缩放镜头；**Option／Alt＋滚轮**选择交互项；长按 **R** 打开工具转盘。退出增强会话后，直接从 PlayCover 启动即可使用原版。
+
+BetterMacField 在 PlayCover 基础上额外注入增强模块，**可能增加账号被封禁的风险**，启动时会提示。应用使用本地签名，尚未经过 Apple 公证。
+
+### 当前限制
+
+- 默认 **1080p、质量档、Spatial＋原生 TAAU 抗锯齿**，开启角色光照、GTAO 和接触阴影；已有设置会保留。
+- 当前 Spatial 组合存在移动拖影。Temporal 为实验选项，macOS 27 上曾出现 ANE 断言退出，根因尚未解决。
+- LOD 变化遵循游戏的资源流送和释放，已加载的远景可能延迟变化。
+- 主要验证环境是 M1 Max、macOS 27，尚未覆盖全部地图、角色及系统版本。详见[验证记录](docs/validation.md)。
+
+### 构建与开源范围
+
+需要 **Apple Silicon、macOS 13+、Xcode Command Line Tools、Python 3.9+**。运行模块可直接从源码构建：
+
+```sh
+python3 bettermacfield.py build
+python3 -m unittest discover -s tests
+```
+
+**完整光影启动器还需要本地准备的渲染程序导出**，其中游戏衍生的着色程序和绑定文件没有提交到仓库。0.3.5 尚未提供面向任意玩家安装目录的独立提取流程。
+
+```sh
+python3 prepare_graphics.py /path/to/local-rendering-export
+python3 build_release.py
+# 默认国服；国际服需指定：
+python3 bettermacfield.py launch
+python3 bettermacfield.py --region global launch
+```
+
+产物为 `dist/BetterMacField.app`、`dist/BetterMacField-macOS-arm64.zip` 和 `dist/SHA256SUMS.txt`。启动器精确校验客户端与组件，客户端更新后会拒绝加载不匹配的适配。详见[架构](docs/architecture.md)及[使用说明](docs/quickstart.md)。
+
+### 许可证
+
+本项目的启动器与集成源码采用 [MIT](LICENSE)。游戏美术资产、原版或适配后的游戏着色程序、IPA、Unity 资源包及 MOD 数据不进入源码仓库，也不转授为 MIT；应用图标随源码提供。具体边界见 [NOTICE](NOTICE)。

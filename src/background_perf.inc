@@ -3,10 +3,11 @@ static bool background_perf_limited;
 static int background_perf_foreground_rate;
 
 static void background_perf_tick(void) {
+    if(!bmf_background_limit && !background_perf_limited)return;
     // Login/loading uses a different cap. Save a gameplay cap only after the
     // scene exists; otherwise the first background launch can pin play to 30.
     if(!background_perf_limited && !input_scene_is_ready())return;
-    if(NSApp.isActive && !background_perf_limited)return;
+    if((NSApp.isActive || !bmf_background_limit) && !background_perf_limited)return;
     void *application=find_class("UnityEngine","Application");
     const void *getter=application ? class_get_method_from_name(application,"get_targetFrameRate",0) : NULL;
     const void *setter=application ? typed_method(application,"set_targetFrameRate",1,"System.Int32") : NULL;
@@ -14,7 +15,7 @@ static void background_perf_tick(void) {
     void *exception=NULL,*value=runtime_invoke(getter,NULL,NULL,&exception);
     if(exception || !value)return;
     int current=*(int *)object_unbox(value);
-    bool active=NSApp.isActive;
+    bool active=NSApp.isActive || !bmf_background_limit;
     int target=active ? background_perf_foreground_rate : 15;
     if(!active && !background_perf_limited){
         if(current>0 && current<=target)return;
