@@ -8,6 +8,7 @@ static _Atomic(float) native_temporal_jitter_y_sign=-1;
 static atomic_uint native_temporal_motion_mode;
 static atomic_uint native_temporal_width,native_temporal_height,native_temporal_generation;
 static atomic_ulong native_temporal_encodes,native_temporal_aliases,native_temporal_completed,native_temporal_errors;
+static atomic_ulong native_temporal_scaler_creations,native_temporal_history_resets;
 static atomic_ulong native_temporal_fullres_calls;
 static atomic_bool native_temporal_sample_motion;
 static char native_temporal_pipeline_key,native_temporal_encoder_key,native_temporal_buffer_key,native_temporal_alias_key;
@@ -135,17 +136,22 @@ static void native_temporal_ended(id encoder) {
             static unsigned generation;
             static double lastEncode;
             id<MTLDevice> device=frame.commandBuffer.device;
-            bool reset=generation!=atomic_load(&native_temporal_generation) || !scaler ||
+            unsigned requestedGeneration=atomic_load(&native_temporal_generation);
+            bool recreate=!scaler ||
                 scaler.inputWidth!=color.width || scaler.inputHeight!=color.height ||
                 scaler.outputWidth!=width || scaler.outputHeight!=height;
-            if(reset){
+            // Camera changes and mode toggles discard history without rebuilding
+            // the scaler or restarting its asynchronous backend initialization.
+            bool reset=recreate || generation!=requestedGeneration;
+            if(recreate){
                 MTLFXTemporalScalerDescriptor *descriptor=[MTLFXTemporalScalerDescriptor new];
                 descriptor.inputWidth=color.width;descriptor.inputHeight=color.height;
                 descriptor.outputWidth=width;descriptor.outputHeight=height;
                 descriptor.colorTextureFormat=color.pixelFormat;descriptor.depthTextureFormat=depth.pixelFormat;
                 descriptor.motionTextureFormat=MTLPixelFormatRG16Float;descriptor.outputTextureFormat=color.pixelFormat;
                 scaler=[descriptor newTemporalScalerWithDevice:device];
-                generation=atomic_load(&native_temporal_generation);unpacked=nil;result=nil;
+                unpacked=nil;result=nil;lastEncode=0;
+                if(scaler)atomic_fetch_add(&native_temporal_scaler_creations,1);
             }
             if(!scaler){native_temporal_reason=@"MetalFX scaler unavailable";return;}
             if(!unpack){
@@ -221,8 +227,11 @@ static void native_temporal_ended(id encoder) {
             scaler.jitterOffsetX=atomic_load(&native_temporal_jitter_x_sign)*frame.jitterX;
             scaler.jitterOffsetY=atomic_load(&native_temporal_jitter_y_sign)*frame.jitterY;
             scaler.motionVectorScaleX=color.width;scaler.motionVectorScaleY=color.height;
-            scaler.depthReversed=YES;scaler.preExposure=1;scaler.reset=reset || now-lastEncode>.5;
-            [scaler encodeToCommandBuffer:frame.commandBuffer];lastEncode=now;
+            bool resetHistory=reset || now-lastEncode>.5;
+            scaler.depthReversed=YES;scaler.preExposure=1;scaler.reset=resetHistory;
+            [scaler encodeToCommandBuffer:frame.commandBuffer];
+            if(resetHistory)atomic_fetch_add(&native_temporal_history_resets,1);
+            generation=requestedGeneration;lastEncode=now;
             temporal_alignment_capture(frame,result);
             objc_setAssociatedObject(frame.commandBuffer,&native_temporal_alias_key,@[frame.target,result],OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             [frame.commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> buffer){
@@ -258,6 +267,8 @@ static NSDictionary *native_temporal_state(void) {
         @"width":@(atomic_load(&native_temporal_width)),@"height":@(atomic_load(&native_temporal_height)),
         @"encodes":@(atomic_load(&native_temporal_encodes)),@"aliases":@(atomic_load(&native_temporal_aliases)),
         @"completed":@(atomic_load(&native_temporal_completed)),@"errors":@(atomic_load(&native_temporal_errors)),
+        @"scalerCreations":@(atomic_load(&native_temporal_scaler_creations)),
+        @"historyResets":@(atomic_load(&native_temporal_history_resets)),
         @"fullResolutionRequests":@(atomic_load(&native_temporal_fullres_calls)),
         @"reason":native_temporal_reason ?: @""};
 }

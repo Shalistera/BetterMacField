@@ -45,3 +45,10 @@
 
 - 最终候选用同一 `.app` 启动国服并进入雪地场景：角色程序加载 6 个、当前光照变体加载 1 个，GTAO/接触阴影各执行超过 3400 帧，错误均为 0；键鼠信号后桌面提示出现，场景粗查未见缺失地面。该抽查使用 TAAU，不替代全地图或 Temporal 长时验证。
 - 最终 ZIP 内容与签名检查通过：51 个文件，约 0.62 MiB；模型、贴图、MOD、IPA 和 Unity 资源 bundle 均未包含。
+
+## 后续开发候选：Temporal 生命周期（尚未进入上述安装包）
+
+- 历史系统日志补充：07:12:18 与 07:48:40 已出现 GPU Timeout，随后分别在 07:12:47、07:49:02 出现 ANE 推理失败。第二次故障在 GPU 超时前，ANE 驱动已反复报告“有就绪请求但提交数量为 0”；这些记录缩小了排查范围，尚不能证明由哪一处调用触发。
+- 相机/AA 切换和超分开关只重置历史，输入或输出尺寸改变才重建超分器。这样避免反复触发后台初始化，符合 [Apple 对超分器复用的说明](https://developer.apple.com/videos/play/wwdc2022/10103/)。此修改不作为上述超时已经修复的结论。
+- 独立低分辨率程序直接调用当前生产实现，执行 24 帧、一次相机历史变更及一次关闭/开启：24 帧完成，0 GPU 错误，3 次历史重置，超分器只创建 1 次。候选动态库构建通过；游戏内相机/菜单切换与长时间稳定性尚待验证。
+- 手动复现入口：`xcrun clang -fobjc-arc -arch arm64 -mmacosx-version-min=13.0 -Wno-incompatible-pointer-types -framework Foundation -framework Metal -framework MetalFX tests/temporal_lifecycle.m -o /tmp/bmf-temporal-lifecycle`，运行生成的程序。该检查使用独立 Metal 设备与小型测试纹理，不启动游戏。
