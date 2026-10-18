@@ -206,7 +206,9 @@ static bool input_menu_start(bool enabled) {
 static bool input_menu_event(NSEvent *event) {
     if(!input_menu_mouse_handle)return false;
     void *mode=input_static(find_class("Beyond","DeviceInfo"),"get_usingKeyboard",0,NULL);
-    if((input_cursor_captured && event.type!=NSEventTypeScrollWheel) || !NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
+    // Captured gameplay owns the wheel for camera zoom. Option releases the
+    // cursor through input_capture, allowing the UI to receive wheel events.
+    if(input_cursor_captured || !NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
         input_menu_release();return false;
     }
     NSView *view=event.window.contentView;

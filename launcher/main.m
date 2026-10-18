@@ -218,12 +218,12 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
             y-=([name isEqual:@"光影"] ? 51 : 72);
         }
         if([name isEqual:@"操作"]){
-            NSTextField *help=label(@"视频对比：F11 或 ⌘⇧G 临时切换原生／增强光影，再按即可恢复。\nSDK 登录和内置浏览器保留触摸兼容；按键与鼠标进入场景后自动接管。",13,NO);
+            NSTextField *help=label(@"视频对比：⌘⇧G 临时切换原生／增强光影，再按即可恢复。\n滚轮控制镜头；按住 Alt／Option＋滚轮切换交互选项。SDK 与浏览器仍可点击。",13,NO);
             help.frame=NSMakeRect(20,42,660,70);[page addSubview:help];
         }
     }
     self.status=label(@"准备就绪",12,NO);self.status.frame=NSMakeRect(30,84,720,40);[root addSubview:self.status];
-    self.compareButton=[self button:@"光影对比 · F11" action:@selector(compare:) frame:NSMakeRect(28,30,170,36) parent:root];
+    self.compareButton=[self button:@"光影对比 · ⌘⇧G" action:@selector(compare:) frame:NSMakeRect(28,30,170,36) parent:root];
     self.applyButton=[self button:@"保存并应用" action:@selector(apply:) frame:NSMakeRect(432,30,145,36) parent:root];
     self.launchButton=[self button:@"启动游戏" action:@selector(launch:) frame:NSMakeRect(590,30,160,36) parent:root];self.launchButton.keyEquivalent=@"\r";
     [self regionChanged:nil];[self.window center];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
@@ -299,7 +299,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
         [text appendFormat:@"场景：%@\n%@\n光影对比：%@\n光影程序：%@    角色程序：%@\nGTAO 帧数：%@  错误：%@\n接触阴影帧数：%@  错误：%@\n\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",state[@"settingsResult"],[state[@"comparisonBaseline"] boolValue] ? @"原生" : @"增强设置",state[@"lightingPrograms"],state[@"characterPrograms"],state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
         NSDictionary *fx=state[@"metalFX"];[text appendFormat:@"MetalFX：%@\n",fx ?: @{}];
     }
-    [text appendString:@"\nF11 / ⌘⇧G：临时切换光影。分辨率、超分和 LOD 保持当前设置。\n\nGTAO、接触阴影、SSR、角色光影可单独调整。\nMOD、模型和贴图替换未打包。\n\n测试版默认 Spatial＋原生 TAAU，移动时有拖影。\nTemporal 为实验选项，macOS 27 曾出现 ANE 异常退出。\n国服和国际服已完成 TAAU 场景抽查；状态页显示实际执行次数。"];
+    [text appendString:@"\n⌘⇧G：临时切换光影。分辨率、超分和 LOD 保持当前设置。\n\nGTAO、接触阴影、SSR、角色光影可单独调整。\nMOD、模型和贴图替换未打包。\n\n测试版默认 Spatial＋原生 TAAU，移动时有拖影。\nTemporal 为实验选项，macOS 27 曾出现 ANE 异常退出。\n国服和国际服已完成 TAAU 场景抽查；状态页显示实际执行次数。"];
     self.details.string=text;
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return YES;}

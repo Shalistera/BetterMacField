@@ -36,7 +36,7 @@ def main():
         runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest(), payload=payload), indent=2)+'\n')
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='io.shalistera.BetterMacField',
         CFBundleName='BetterMacField', CFBundleDisplayName='BetterMacField', CFBundleExecutable='BetterMacField',
-        CFBundlePackageType='APPL', CFBundleShortVersionString='0.3.2', CFBundleVersion='5',
+        CFBundlePackageType='APPL', CFBundleShortVersionString='0.3.3', CFBundleVersion='6',
         LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True)))
     subprocess.run(['xcrun', 'clang', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=13.0',
         '-Wno-deprecated-declarations', '-framework', 'AppKit', '-framework', 'Foundation',

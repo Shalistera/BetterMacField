@@ -39,7 +39,7 @@ static bool bmf_compare(void) {
         character_skin_control(@{@"mode":restoring ? target[@"characterMode"] : @0});
         if(restoring)metal_ssr_history_control(@{@"strength":target[@"ssrStrength"],@"steps":target[@"ssrSteps"]});
         core_comparison_active=!restoring;
-        display_last_result=restoring ? @"已恢复切换前的增强光影" : @"原生光影对比 · 再按 F11 恢复增强";
+        display_last_result=restoring ? @"已恢复切换前的增强光影" : @"原生光影对比 · 再按 ⌘⇧G 恢复增强";
     }else if(!restoring){
         native_lighting_control(core_comparison_lighting);
         override_volume(@"HGCharacterVolume",@{@"enabled":@(core_comparison_shadow)},false);
@@ -138,14 +138,14 @@ static void install_core_menu(void) {
         }
     }
     [menu addItem:NSMenuItem.separatorItem];
-    NSMenuItem *comparison=[menu addItemWithTitle:@"光影对比：临时切回原生" action:@selector(compare:) keyEquivalent:[NSString stringWithFormat:@"%C",(unichar)NSF11FunctionKey]];
-    comparison.target=core_menu;comparison.tag=4;comparison.keyEquivalentModifierMask=0;
-    comparison.toolTip=@"F11 或 ⌘⇧G：切换自阴影、角色光照、GTAO、接触阴影、SSR 与阴影精度。分辨率、超分与 LOD 保持不变。";
+    NSMenuItem *comparison=[menu addItemWithTitle:@"光影对比：临时切回原生" action:@selector(compare:) keyEquivalent:@"g"];
+    comparison.target=core_menu;comparison.tag=4;comparison.keyEquivalentModifierMask=NSEventModifierFlagCommand|NSEventModifierFlagShift;
+    comparison.toolTip=@"⌘⇧G：切换自阴影、角色光照、GTAO、接触阴影、SSR 与阴影精度。分辨率、超分与 LOD 保持不变。";
     [menu addItemWithTitle:display_last_result action:NULL keyEquivalent:@""].tag=3;
     [NSApp.mainMenu addItemWithTitle:@"BetterMacField" action:NULL keyEquivalent:@""].submenu=menu;
     core_comparison_shortcut=[NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event){
         NSEventModifierFlags flags=event.modifierFlags & (NSEventModifierFlagCommand|NSEventModifierFlagShift|NSEventModifierFlagOption|NSEventModifierFlagControl);
-        if(NSApp.isActive && ((event.keyCode==103 && flags==0) || (event.keyCode==5 && flags==(NSEventModifierFlagCommand|NSEventModifierFlagShift)))){
+        if(NSApp.isActive && event.keyCode==5 && flags==(NSEventModifierFlagCommand|NSEventModifierFlagShift)){
             if(!event.isARepeat)bmf_compare();return nil;
         }return event;
     }];

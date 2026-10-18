@@ -177,7 +177,7 @@
       "key": "keyboard",
       "title": "自动键鼠模式",
       "default": true,
-      "help": "包含 Shift / E、长按 R 转盘、滚轮交互；SDK 与内置浏览器仍可点击。"
+      "help": "Shift / E、长按 R 转盘；滚轮控制镜头，按住 Alt／Option＋滚轮切换交互选项；SDK 与浏览器仍可点击。"
     },
     {
       "page": "操作",
