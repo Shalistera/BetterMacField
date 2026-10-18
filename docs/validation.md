@@ -25,9 +25,9 @@
 
 ## 已知边界
 
-- 2026-10-18 重新核对原始崩溃报告：07:12 的进程加载 `libBetterMacField.dylib`，07:49 的进程加载 `libEndfieldQualityProbe.dylib`，两者均在 MetalFX 异步队列的 `MPSGraph` / `ANERegionCallOpHandler::encodeAsynchronousWithSharedEvents` 中断言退出。该异常同时影响早期精简核心与完整开发版，不能归因于本次新增光影。触发条件尚未确定；此前连续帧测试只代表对应测试窗口。默认使用 TAAU，Temporal 入口保留。
+- 2026-10-18 重新核对原始崩溃报告：07:12 的进程加载 `libBetterMacField.dylib`，07:49 的进程加载 `libEndfieldQualityProbe.dylib`，两者均在 MetalFX 异步队列的 `MPSGraph` / `ANERegionCallOpHandler::encodeAsynchronousWithSharedEvents` 中断言退出。该异常同时影响早期精简核心与完整开发版，不能归因于本次新增光影。触发条件尚未确定；此前连续帧测试只代表对应测试窗口。0.3.2 默认 Spatial，Temporal 入口保留。
 - 同日上午实验期间，Mac 发生一次 GPU 固件 `GFX DATA ABORT` 系统重启。此时已重启到默认 TAAU，尚未执行同步初始化候选的 Temporal 启用命令；系统崩溃与前述 ANE 退出的因果关系未确定。开发候选已撤回，暂停该候选的 GPU 实机复测。精简发布核心尚无对应复现。
-- Spatial 是备选，当前沿用的原版 TAAU 抗锯齿组合有明显移动拖影。
+- 0.3.2 默认 Spatial，沿用原版 TAAU 抗锯齿，当前组合有明显移动拖影。
 - 0.3.0 重新接入 GTAO、接触阴影、SSR 和角色着色；上文较早的精简包测试不代表这些新增组合均已验证。
 - LOD 参数恢复后，已驻留资源由游戏自行释放，不能保证当帧得到完全一致的移动端对照图。
 - 本次未覆盖所有地图、角色、战斗状态及 macOS 版本；运行通过和 GPU 无错误不等同于全部画面已经无瑕疵。
@@ -53,3 +53,10 @@
 - 独立低分辨率程序直接调用当前生产实现，执行 24 帧、一次相机历史变更及一次关闭/开启：24 帧完成，0 GPU 错误，3 次历史重置，超分器只创建 1 次。
 - 国际服真实场景使用 1920×1080 输出、质量档、完整光影：Temporal 完成 8959 帧，GTAO/接触阴影各执行 10629 帧，三者错误计数均为 0。实际打开主菜单与洛茜干员界面，模型和 UI 粗查完整；临时切换 TAAU 再启用 Temporal 后，历史累计重置 3 次，超分器仍只创建 1 次。未覆盖长期挂后台与跨地图过程，旧超时问题仍保留为未解决项。
 - 手动复现入口：`xcrun clang -fobjc-arc -arch arm64 -mmacosx-version-min=13.0 -Wno-incompatible-pointer-types -framework Foundation -framework Metal -framework MetalFX tests/temporal_lifecycle.m -o /tmp/bmf-temporal-lifecycle`，运行生成的程序。该检查使用独立 Metal 设备与小型测试纹理，不启动游戏。
+
+## 2026-10-18 测试版 0.3.2：Spatial 默认
+
+- 测试版默认 Spatial＋原生 TAAU；完整光影、键鼠、LOD、Metal HUD 和对比快捷键保留。Temporal 为实验选项，FXAA 候选未进入发布包。
+- 两服客户端与全部打包组件精确校验通过。国际服通过最终打包应用进入场景，1080p 质量档，Spatial 连续完成超过 5200 帧，GPU 错误为 0；GTAO、接触阴影错误为 0，SSR 同时开启。⌘⇧G 已实际完成增强→原生→增强往返，输出分辨率和 Spatial 保持一致。
+- 本轮国服重新检查客户端身份与打包组件；Spatial 场景尚未在此包重新抽查。移动拖影保留为已知问题，短测不等同长期稳定性结论。
+- 包内 15 个设置项和 43 个图形/设置载荷通过 SHA-256 校验；arm64 本地签名和 ZIP 完整性通过。未包含 MOD、模型、纹理、IPA 或 Unity 资源包。

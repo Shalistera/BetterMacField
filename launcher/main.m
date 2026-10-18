@@ -299,7 +299,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
         [text appendFormat:@"场景：%@\n%@\n光影对比：%@\n光影程序：%@    角色程序：%@\nGTAO 帧数：%@  错误：%@\n接触阴影帧数：%@  错误：%@\n\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",state[@"settingsResult"],[state[@"comparisonBaseline"] boolValue] ? @"原生" : @"增强设置",state[@"lightingPrograms"],state[@"characterPrograms"],state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
         NSDictionary *fx=state[@"metalFX"];[text appendFormat:@"MetalFX：%@\n",fx ?: @{}];
     }
-    [text appendString:@"\nF11 / ⌘⇧G：临时切换光影。分辨率、超分和 LOD 保持当前设置。\n\nGTAO、接触阴影、SSR、角色光影可单独调整。\nMOD、模型和贴图替换未打包。\n\nmacOS 27 曾出现 Temporal / ANE 运行异常；遇到异常可选 TAAU。\n国服和国际服已完成 TAAU 场景抽查；状态页显示实际执行次数。"];
+    [text appendString:@"\nF11 / ⌘⇧G：临时切换光影。分辨率、超分和 LOD 保持当前设置。\n\nGTAO、接触阴影、SSR、角色光影可单独调整。\nMOD、模型和贴图替换未打包。\n\n测试版默认 Spatial＋原生 TAAU，移动时有拖影。\nTemporal 为实验选项，macOS 27 曾出现 ANE 异常退出。\n国服和国际服已完成 TAAU 场景抽查；状态页显示实际执行次数。"];
     self.details.string=text;
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return YES;}

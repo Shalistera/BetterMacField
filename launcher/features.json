@@ -29,22 +29,22 @@
       "page": "画面",
       "key": "upscaler",
       "title": "超分模式",
-      "default": "taau",
+      "default": "metalfx-spatial",
       "choices": [
         {
           "title": "TAAU · 原版",
           "value": "taau"
         },
         {
-          "title": "MetalFX Temporal · 原生环境光",
+          "title": "MetalFX Temporal · 实验",
           "value": "metalfx-native"
         },
         {
-          "title": "MetalFX Spatial · 备选",
+          "title": "MetalFX Spatial · 测试版默认",
           "value": "metalfx-spatial"
         }
       ],
-      "help": "Temporal 支持动态重建；Spatial 沿用 TAAU 抗锯齿，移动时可能有拖影。"
+      "help": "测试版默认 Spatial＋原生 TAAU，移动时有拖影。Temporal 保留实验入口，可能出现异常退出。"
     },
     {
       "page": "画面",

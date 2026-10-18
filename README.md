@@ -21,7 +21,7 @@ Launcher 与游戏内菜单共用设置项，两服分别保存。玩家使用 `
 
 在 PlayCover 安装对应服的 IPA，正常启动并下载完资料，然后退出。解压 `BetterMacField-macOS-arm64.zip`，打开 `BetterMacField.app`，选择区域与设置，再点击「启动游戏」。进入场景后设置自动应用，也可以实时保存调整。
 
-默认 1080p、质量档、TAAU，开启角色光影、GTAO和接触阴影。SSR、实验性 PC 高光可自行开启。完整步骤、录制对比和恢复说明见 [使用说明](docs/quickstart.md)。
+0.3.2 测试版默认 1080p、质量档、MetalFX Spatial＋原生 TAAU 抗锯齿，开启角色光影、GTAO 和接触阴影。当前 Spatial 组合存在移动拖影。SSR、实验性 PC 高光可自行开启，Temporal 保留为实验选项。已有设置会继续保留，升级用户可在超分模式中选择 Spatial。完整步骤、录制对比和恢复说明见 [使用说明](docs/quickstart.md)。
 
 当前使用本地签名，尚未 Apple 公证；其他 Mac 下载后的首次打开仍需实际验证。完整 Metal HUD 菜单在 macOS 27 验证，其可用项取决于系统版本。
 
@@ -50,4 +50,4 @@ python3 bettermacfield.py --region cn launch
 
 ## 已知情况
 
-macOS 27 上，早期精简核心与完整开发版均曾发生 Temporal / ANE 断言退出，目前尚未确定触发条件，因此默认 TAAU，Temporal 入口保留。Spatial 有移动拖影。LOD 恢复后驻留内容由游戏释放。地图与角色覆盖范围、实际验证和已知问题见 [验证记录](docs/validation.md)，实现与更新适配见 [架构](docs/architecture.md)。
+测试版默认 Spatial，保留其当前组合的移动拖影问题。macOS 27 上，早期精简核心与完整开发版均曾发生 Temporal / ANE 断言退出，触发条件尚未确定；Temporal 集成调整留待本轮功能定型后集中处理。LOD 恢复后驻留内容由游戏释放。地图与角色覆盖范围、实际验证和已知问题见 [验证记录](docs/validation.md)，实现与更新适配见 [架构](docs/architecture.md)。
