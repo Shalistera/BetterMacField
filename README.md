@@ -24,6 +24,8 @@ The launcher and in-game menu share their settings. CN and global settings are s
 
 ### Use
 
+Download the app ZIP from [Releases](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5). `SHA256SUMS.txt` is provided alongside it.
+
 1. Install a supported IPA through PlayCover, launch it once, finish downloading the game data, then exit the game.
 2. Open a prepared `BetterMacField.app` package. Read the injection-risk notice: “Use” unlocks after **10 seconds**, “Do not use” exits immediately, and “Do not show again” is optional.
 3. Select the region and graphics settings, then launch the game. The packaged app requires no Python, Xcode or terminal.
@@ -39,7 +41,9 @@ The launcher finds PlayCover installations under:
 
 Scroll to zoom the camera. Hold **Option/Alt + scroll** to select interaction entries. Hold **R** to open the tool wheel. Exit the enhanced session and launch directly through PlayCover to use the original client.
 
-BetterMacField adds another injected module on top of PlayCover and **may increase the risk of an account ban**. The launcher displays this notice before use. The app is locally signed and is not Apple-notarized.
+BetterMacField adds another injected module on top of PlayCover and **may increase the risk of an account ban**. The launcher displays this notice before use.
+
+**This project currently has no paid Apple Developer Program membership.** The app is ad-hoc signed, without Developer ID signing or Apple notarization. macOS may block its first launch.
 
 ### Current limits
 
@@ -93,6 +97,8 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 
 ### 使用
 
+从 [Releases](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5) 下载应用 ZIP，同页提供 `SHA256SUMS.txt` 校验文件。
+
 1. 在 PlayCover 安装对应版本 IPA，启动游戏下载完资料后退出。
 2. 打开已打包的 `BetterMacField.app`，阅读注入风险提示。**10 秒**后可点击“使用”；“不使用”立即退出，可勾选“下次不提示”。
 3. 选择服务器和设置，点击“启动游戏”。使用打包应用无需 Python、Xcode 或终端。
@@ -108,7 +114,9 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 
 滚轮缩放镜头；**Option／Alt＋滚轮**选择交互项；长按 **R** 打开工具转盘。退出增强会话后，直接从 PlayCover 启动即可使用原版。
 
-BetterMacField 在 PlayCover 基础上额外注入增强模块，**可能增加账号被封禁的风险**，启动时会提示。应用使用本地签名，尚未经过 Apple 公证。
+BetterMacField 在 PlayCover 基础上额外注入增强模块，**可能增加账号被封禁的风险**，启动时会提示。
+
+**本项目目前没有付费 Apple 开发者账号。** 应用采用本地签名，未使用 Developer ID 签名，也未经 Apple 公证；首次打开可能被 macOS 拦截。
 
 ### 当前限制
 
