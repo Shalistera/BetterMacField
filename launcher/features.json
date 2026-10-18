@@ -206,13 +206,6 @@
       "title": "对比时恢复手机 LOD",
       "default": true,
       "help": ""
-    },
-    {
-      "page": "操作",
-      "key": "privateUID",
-      "title": "UID 显示为「不给你看」",
-      "default": false,
-      "help": ""
     }
   ]
 }

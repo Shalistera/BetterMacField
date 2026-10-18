@@ -180,7 +180,35 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
 - (NSButton *)button:(NSString *)title action:(SEL)action frame:(NSRect)frame parent:(NSView *)parent {
     NSButton *b=[NSButton buttonWithTitle:title target:self action:action];b.frame=frame;[parent addSubview:b];return b;
 }
+- (void)experimentalUnavailable:(id)sender {
+    NSAlert *alert=[[NSAlert alloc] init];alert.messageText=@"暂未开放";
+    [alert addButtonWithTitle:@"知道了"];
+    [alert beginSheetModalForWindow:self.window completionHandler:nil];
+}
+- (BOOL)confirmUsage {
+    if([NSUserDefaults.standardUserDefaults boolForKey:@"SkipInjectionRiskNotice"])return YES;
+    NSAlert *alert=[[NSAlert alloc] init];alert.alertStyle=NSAlertStyleWarning;
+    alert.messageText=@"使用前请阅读";
+    alert.informativeText=@"BetterMacField 在 PlayCover 基础上额外注入增强模块，可能增加账号被封禁的风险。请自行评估后决定是否使用。";
+    NSButton *accept=[alert addButtonWithTitle:@"使用（10 秒）"];accept.enabled=NO;
+    [alert addButtonWithTitle:@"不使用"].keyEquivalent=@"\e";
+    alert.showsSuppressionButton=YES;alert.suppressionButton.title=@"下次不提示";
+    NSTimeInterval deadline=NSProcessInfo.processInfo.systemUptime+10.0;
+    NSTimer *timer=[NSTimer timerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *tick){
+        NSInteger remaining=(NSInteger)ceil(MAX(0.0,deadline-NSProcessInfo.processInfo.systemUptime));
+        accept.title=remaining ? [NSString stringWithFormat:@"使用（%ld 秒）",(long)remaining] : @"使用";
+        accept.enabled=(remaining==0);
+    }];
+    [NSRunLoop.mainRunLoop addTimer:timer forMode:NSModalPanelRunLoopMode];
+    [NSApp activateIgnoringOtherApps:YES];
+    NSModalResponse response=[alert runModal];[timer invalidate];
+    if(response!=NSAlertFirstButtonReturn)return NO;
+    if(alert.suppressionButton.state==NSControlStateValueOn)
+        [NSUserDefaults.standardUserDefaults setBool:YES forKey:@"SkipInjectionRiskNotice"];
+    return YES;
+}
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
+    if(![self confirmUsage]){[NSApp terminate:nil];return;}
     self.controls=[NSMutableDictionary dictionary];
     self.window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,780,660) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable backing:NSBackingStoreBuffered defer:NO];
     self.window.title=@"BetterMacField";self.window.delegate=self;self.window.releasedWhenClosed=NO;
@@ -189,11 +217,21 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     NSTextField *sub=label(@"终末地 · macOS 增强工具",13,NO);sub.textColor=NSColor.secondaryLabelColor;sub.frame=NSMakeRect(30,577,580,22);[root addSubview:sub];
     self.regions=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(570,604,180,30) pullsDown:NO];[self.regions addItemsWithTitles:@[@"国际服 · 1.6.3",@"国服 · 1.6.3"]];
     self.regions.target=self;self.regions.action=@selector(regionChanged:);[root addSubview:self.regions];
-    if([[NSUserDefaults.standardUserDefaults stringForKey:@"SelectedRegion"] isEqual:@"cn"])[self.regions selectItemAtIndex:1];
+    if(![[NSUserDefaults.standardUserDefaults stringForKey:@"SelectedRegion"] isEqual:@"global"])[self.regions selectItemAtIndex:1];
     NSTabView *tabs=[[NSTabView alloc] initWithFrame:NSMakeRect(24,136,732,432)];[root addSubview:tabs];
-    for(NSString *name in @[@"画面",@"光影",@"操作",@"状态与恢复"]){
+    for(NSString *name in @[@"画面",@"光影",@"操作",@"实验性功能",@"状态与恢复"]){
         NSTabViewItem *tab=[[NSTabViewItem alloc] initWithIdentifier:name];tab.label=name;
         NSView *page=[[NSView alloc] initWithFrame:NSMakeRect(0,0,706,388)];tab.view=page;[tabs addTabViewItem:tab];
+        if([name isEqual:@"实验性功能"]){
+            CGFloat y=320;
+            for(NSString *title in @[@"替换PC版角色高模",@"使用EFMIMOD"]){
+                NSButton *button=[self button:title action:@selector(experimentalUnavailable:) frame:NSMakeRect(18,y,300,38) parent:page];
+                button.attributedTitle=[[NSAttributedString alloc] initWithString:title attributes:@{NSForegroundColorAttributeName:NSColor.disabledControlTextColor}];
+                button.toolTip=@"暂未开放";
+                y-=58;
+            }
+            continue;
+        }
         if([name isEqual:@"状态与恢复"]){
             NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:NSMakeRect(16,92,672,278)];scroll.hasVerticalScroller=YES;scroll.borderType=NSBezelBorder;
             self.details=[[NSTextView alloc] initWithFrame:scroll.bounds];self.details.editable=NO;self.details.font=[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];self.details.autoresizingMask=NSViewWidthSizable;scroll.documentView=self.details;[page addSubview:scroll];
@@ -309,7 +347,7 @@ int main(int argc,const char **argv) {
         @try {
             if(!packageInfo() || !catalog())fail(@"启动器文件不完整，请重新解压完整安装包。");
             if(commandLine){
-                NSString *region=argument(args,@"--region") ?: @"global";
+                NSString *region=argument(args,@"--region") ?: @"cn";
                 if(!packageInfo()[@"clients"][region])fail(@"未知客户端区域。");
                 NSString *path=argument(args,@"--app") ?: clientPath(region);
                 if(restore){stopClient(region,NO);displaySettings(path,restoreRecord(region),packageInfo()[@"displaySettings"],YES);puts("PlayCover settings restored.");return 0;}

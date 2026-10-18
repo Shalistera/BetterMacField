@@ -213,7 +213,7 @@ def launch(app, restart):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, help='Exact PlayCover app bundle')
-    parser.add_argument('--region', choices=tuple(CLIENTS), default='global')
+    parser.add_argument('--region', choices=tuple(CLIENTS), default='cn')
     sub = parser.add_subparsers(dest='action', required=True)
     sub.add_parser('check');sub.add_parser('build');sub.add_parser('status')
     sub.add_parser('restore-settings', help='Restore only settings changed by this launcher')
