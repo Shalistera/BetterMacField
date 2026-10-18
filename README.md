@@ -11,7 +11,7 @@
 | 操作 | 自动键鼠、Shift/E 与鼠标滚轮桥接、工具转盘、SDK/浏览器点击兼容、后台 15 FPS 节能、系统 Metal HUD |
 | 状态与恢复 | 客户端和组件校验、运行状态、日志复制、PlayCover 设置恢复 |
 
-**⌘⇧G / Launcher 按钮**临时切换原生与增强光影，再按恢复原设置；输出分辨率、超分、LOD 保持一致。此对比包含 GTAO、接触阴影、SSR、角色光照、自阴影和阴影精度。
+**⌘G / Launcher 按钮**切换原生与增强画面，再按恢复原设置。包含 GTAO、接触阴影、SSR、角色光照、自阴影和阴影精度；默认同时回退至 TAAU＋50% 渲染和手机 LOD，可在操作页取消。
 
 Launcher 与游戏内菜单共用设置项，两服分别保存。玩家使用 `.app` 无需 Python、Xcode 或终端。客户端二进制与资源包保持原状，正常退出后从 PlayCover 启动即可运行原版。
 
@@ -23,7 +23,7 @@ Launcher 与游戏内菜单共用设置项，两服分别保存。玩家使用 `
 
 在 PlayCover 安装对应服的 IPA，正常启动并下载完资料，然后退出。解压 `BetterMacField-macOS-arm64.zip`，打开 `BetterMacField.app`，选择区域与设置，再点击「启动游戏」。进入场景后设置自动应用，也可以实时保存调整。
 
-0.3.3 测试版默认 1080p、质量档、MetalFX Spatial＋原生 TAAU 抗锯齿，开启角色光影、GTAO 和接触阴影。当前 Spatial 组合存在移动拖影。SSR、实验性 PC 高光可自行开启，Temporal 保留为实验选项。已有设置会继续保留，升级用户可在超分模式中选择 Spatial。完整步骤、录制对比和恢复说明见 [使用说明](docs/quickstart.md)。
+0.3.4 测试版默认 1080p、质量档、MetalFX Spatial＋原生 TAAU 抗锯齿，开启角色光影、GTAO 和接触阴影。当前 Spatial 组合存在移动拖影。SSR、实验性 PC 高光可自行开启，Temporal 保留为实验选项。已有设置会继续保留，升级用户可在超分模式中选择 Spatial。启动与操作说明见 [使用说明](docs/quickstart.md)。
 
 当前使用本地签名，尚未 Apple 公证；其他 Mac 下载后的首次打开仍需实际验证。完整 Metal HUD 菜单在 macOS 27 验证，其可用项取决于系统版本。
 

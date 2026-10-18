@@ -171,7 +171,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
         }else ((NSButton *)control).state=[value boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
     }
 }
-- (void)changed:(id)sender {self.dirty=YES;self.status.stringValue=@"设置待保存 · 点击“保存并应用”；启动游戏也会保存当前设置。";}
+- (void)changed:(id)sender {self.dirty=YES;self.status.stringValue=@"设置未保存";}
 - (void)regionChanged:(id)sender {
     [NSUserDefaults.standardUserDefaults setObject:self.region forKey:@"SelectedRegion"];
     [self showSettings:loadSettings(self.region)];self.dirty=NO;self.lastSettingsFingerprint=nil;[self refresh:nil];
@@ -183,10 +183,10 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
     self.controls=[NSMutableDictionary dictionary];
     self.window=[[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,780,660) styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable backing:NSBackingStoreBuffered defer:NO];
-    self.window.title=@"BetterMacField · 画质与操作";self.window.delegate=self;self.window.releasedWhenClosed=NO;
+    self.window.title=@"BetterMacField";self.window.delegate=self;self.window.releasedWhenClosed=NO;
     NSView *root=self.window.contentView;
     NSTextField *title=label(@"BetterMacField",26,YES);title.frame=NSMakeRect(28,604,450,36);[root addSubview:title];
-    NSTextField *sub=label(@"PlayCover 上的终末地 · 画质、键鼠与实时光影对比",13,NO);sub.textColor=NSColor.secondaryLabelColor;sub.frame=NSMakeRect(30,577,580,22);[root addSubview:sub];
+    NSTextField *sub=label(@"终末地 · macOS 增强工具",13,NO);sub.textColor=NSColor.secondaryLabelColor;sub.frame=NSMakeRect(30,577,580,22);[root addSubview:sub];
     self.regions=[[NSPopUpButton alloc] initWithFrame:NSMakeRect(570,604,180,30) pullsDown:NO];[self.regions addItemsWithTitles:@[@"国际服 · 1.6.3",@"国服 · 1.6.3"]];
     self.regions.target=self;self.regions.action=@selector(regionChanged:);[root addSubview:self.regions];
     if([[NSUserDefaults.standardUserDefaults stringForKey:@"SelectedRegion"] isEqual:@"cn"])[self.regions selectItemAtIndex:1];
@@ -200,7 +200,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
             [self button:@"校验客户端与组件" action:@selector(check:) frame:NSMakeRect(16,48,175,30) parent:page];
             [self button:@"复制运行日志" action:@selector(copyLog:) frame:NSMakeRect(203,48,150,30) parent:page];
             [self button:@"恢复 PlayCover 设置" action:@selector(restore:) frame:NSMakeRect(365,48,190,30) parent:page];
-            NSTextField *help=label(@"直接从 PlayCover 启动即可使用原版；恢复按钮仅还原 Launcher 修改的 PlayCover 设置。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
+            NSTextField *help=label(@"恢复本工具修改的 PlayCover 设置。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
         }
         CGFloat y=362;
         for(NSDictionary *field in catalog()[@"fields"]){
@@ -215,15 +215,12 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
                 NSButton *toggle=[NSButton checkboxWithTitle:field[@"title"] target:self action:@selector(changed:)];toggle.frame=NSMakeRect(18,y-6,650,24);[page addSubview:toggle];self.controls[key]=toggle;
             }
             NSString *text=field[@"help"];if(text.length){NSTextField *help=label(text,11,NO);help.textColor=NSColor.secondaryLabelColor;help.frame=NSMakeRect(20,y-36,660,26);[page addSubview:help];}
-            y-=([name isEqual:@"光影"] ? 51 : 72);
+            y-=([name isEqual:@"画面"] ? 72 : 51);
         }
-        if([name isEqual:@"操作"]){
-            NSTextField *help=label(@"视频对比：⌘⇧G 临时切换原生／增强光影，再按即可恢复。\n滚轮控制镜头；按住 Alt／Option＋滚轮切换交互选项。SDK 与浏览器仍可点击。",13,NO);
-            help.frame=NSMakeRect(20,42,660,70);[page addSubview:help];
-        }
+
     }
     self.status=label(@"准备就绪",12,NO);self.status.frame=NSMakeRect(30,84,720,40);[root addSubview:self.status];
-    self.compareButton=[self button:@"光影对比 · ⌘⇧G" action:@selector(compare:) frame:NSMakeRect(28,30,170,36) parent:root];
+    self.compareButton=[self button:@"画面对比 · ⌘G" action:@selector(compare:) frame:NSMakeRect(28,30,170,36) parent:root];
     self.applyButton=[self button:@"保存并应用" action:@selector(apply:) frame:NSMakeRect(432,30,145,36) parent:root];
     self.launchButton=[self button:@"启动游戏" action:@selector(launch:) frame:NSMakeRect(590,30,160,36) parent:root];self.launchButton.keyEquivalent=@"\r";
     [self regionChanged:nil];[self.window center];[self.window makeKeyAndOrderFront:nil];[NSApp activateIgnoringOtherApps:YES];
@@ -237,7 +234,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     writeJSON(@{@"id":self.pendingRequest,@"op":op,@"settings":settings ?: @{}},[root stringByAppendingPathComponent:@"bettermacfield-command.json"]);
 }
 - (void)apply:(id)sender {
-    @try{[self save];[self send:@"configure" settings:self.settings];self.status.stringValue=@"设置已保存；已运行的增强版会在进入场景后应用。Metal HUD 显示选项在下次启动生效。";}
+    @try{[self save];[self send:@"configure" settings:self.settings];self.status.stringValue=@"设置已保存。Metal HUD 在下次启动生效。";}
     @catch(NSException *e){[self error:e.reason];}
 }
 - (void)compare:(id)sender {@try{[self send:@"compare" settings:nil];}@catch(NSException *e){[self error:e.reason];}}
@@ -296,10 +293,10 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     }
     NSMutableString *text=[NSMutableString stringWithFormat:@"%@\n客户端：%@\n版本：1.6.3\n安装位置：%@\n\n",prefix,[region isEqual:@"cn"] ? @"国服" : @"国际服",clientPath(region)];
     if(live){
-        [text appendFormat:@"场景：%@\n%@\n光影对比：%@\n光影程序：%@    角色程序：%@\nGTAO 帧数：%@  错误：%@\n接触阴影帧数：%@  错误：%@\n\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",state[@"settingsResult"],[state[@"comparisonBaseline"] boolValue] ? @"原生" : @"增强设置",state[@"lightingPrograms"],state[@"characterPrograms"],state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
-        NSDictionary *fx=state[@"metalFX"];[text appendFormat:@"MetalFX：%@\n",fx ?: @{}];
+        [text appendFormat:@"场景：%@\n画面对比：%@\nGTAO：%@ 帧 · %@ 错误\n接触阴影：%@ 帧 · %@ 错误\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",[state[@"comparisonBaseline"] boolValue] ? @"原生设置" : @"增强设置",state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
+        NSDictionary *fx=state[@"metalFX"],*effective=state[@"effective"];
+        [text appendFormat:@"超分：%@\nLOD：%@\nMetalFX：%@ 帧 · %@ 错误\n",effective[@"upscaler"] ?: @"—",effective[@"lod"] ?: @"—",fx[@"encodes"] ?: @0,fx[@"errors"] ?: @0];
     }
-    [text appendString:@"\n⌘⇧G：临时切换光影。分辨率、超分和 LOD 保持当前设置。\n\nGTAO、接触阴影、SSR、角色光影可单独调整。\nMOD、模型和贴图替换未打包。\n\n测试版默认 Spatial＋原生 TAAU，移动时有拖影。\nTemporal 为实验选项，macOS 27 曾出现 ANE 异常退出。\n国服和国际服已完成 TAAU 场景抽查；状态页显示实际执行次数。"];
     self.details.string=text;
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return YES;}

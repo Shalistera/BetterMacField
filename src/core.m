@@ -35,6 +35,7 @@ static NSString *const character_shadow_saved_key=@"BetterMacFieldCharacterSelfS
 #include "background_perf.inc"
 #include "metal_hud.inc"
 #include "menu.inc"
+#include "uid_display.inc"
 
 static dispatch_source_t core_timer;
 static bool core_settings_pending=true;
@@ -50,6 +51,7 @@ static void core_start(void) {
     dispatch_source_set_event_handler(core_timer,^{@autoreleasepool {
         @try {
             core_command();
+            bmf_uid_update();
             input_auto_window_update();
             background_perf_tick();
             if(core_settings_pending && input_static(find_class("Beyond.Scripts.Quality","QualityManager"),"get_instance",0,NULL)){

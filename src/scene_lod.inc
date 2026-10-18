@@ -45,7 +45,7 @@ static bool scene_lod_refresh(void) {
     return ok;
 }
 
-static void scene_lod_control(NSDictionary *command) {
+static bool scene_lod_control(NSDictionary *command) {
     NSString *profile=command[@"profile"] ?: @"status";
     NSString *result=@"status";
     bool restore=[profile isEqual:@"restore"];
@@ -82,6 +82,7 @@ static void scene_lod_control(NSDictionary *command) {
     [[NSJSONSerialization dataWithJSONObject:state options:NSJSONWritingPrettyPrinted error:nil]
         writeToFile:runtime_path(@"bettermacfield-scene-lod.json") atomically:YES];
     fprintf(output,"scene_lod=%s profile=%s\n",result.UTF8String,[state[@"profile"] UTF8String]);
+    return [result isEqual:@"applied"] || [result isEqual:@"status"];
 }
 
 static void scene_lod_startup_tick(void) {

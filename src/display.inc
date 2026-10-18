@@ -259,33 +259,33 @@ static bool display_set_resolution(int width,int height) {
 static uint32_t display_aa_camera;
 static int display_aa_original;
 static bool display_aa_saved_cpp,display_aa_original_cpp;
-static void display_upscaler(NSDictionary *command) {
+static bool display_upscaler(NSDictionary *command) {
     NSString *mode=command[@"mode"];
     void *camera=input_static(find_class("UnityEngine","Camera"),"get_main",0,NULL);
     int multipass=0;void *args[]={camera,&multipass};
     void *hg=camera ? input_static(find_class("HG.Rendering.Runtime","HGCamera"),"TryGet",2,args) : NULL;
-    if(!hg){fprintf(output,"upscaler_result=no_camera\n");return;}
+    if(!hg){fprintf(output,"upscaler_result=no_camera\n");return false;}
     bool restore=[mode isEqual:@"restore"],temporal=[mode isEqual:@"metalfx-temporal"];
     bool native=[mode isEqual:@"metalfx-native"],spatial=[mode isEqual:@"metalfx-spatial"];
     bool nativeUpscale=native || spatial;
-    if(!restore && !temporal && !nativeUpscale && ![mode isEqual:@"taau"]){fprintf(output,"upscaler_result=invalid_mode\n");return;}
+    if(!restore && !temporal && !nativeUpscale && ![mode isEqual:@"taau"]){fprintf(output,"upscaler_result=invalid_mode\n");return false;}
     if(temporal || nativeUpscale){
         void *supported=input_static(find_class("UnityEngine","SystemInfo"),
             spatial ? "get_supportsMetalFXSpatialScaler" : "get_supportsMetalFXTemporalScaler",0,NULL);
-        if(!supported || !*(bool *)object_unbox(supported)){fprintf(output,"upscaler_result=unsupported\n");return;}
+        if(!supported || !*(bool *)object_unbox(supported)){fprintf(output,"upscaler_result=unsupported\n");return false;}
     }
     bool *cpp=graphics_engine_cpp_flag();
-    if(!cpp){fprintf(output,"upscaler_result=render_path_unavailable\n");return;}
+    if(!cpp){fprintf(output,"upscaler_result=render_path_unavailable\n");return false;}
     int width=0,height=0;
     if(nativeUpscale){
         void *screen=find_class("UnityEngine","Screen");
         void *w=input_static(screen,"get_width",0,NULL),*h=input_static(screen,"get_height",0,NULL);
         if(w)width=*(int *)object_unbox(w);if(h)height=*(int *)object_unbox(h);
-        if(width<1 || height<1 || width>7680 || height>4320){fprintf(output,"upscaler_result=invalid_output_size\n");return;}
-        if(!native_temporal_install_size(hg)){fprintf(output,"upscaler_result=native_size_guard_failed\n");return;}
+        if(width<1 || height<1 || width>7680 || height>4320){fprintf(output,"upscaler_result=invalid_output_size\n");return false;}
+        if(!native_temporal_install_size(hg)){fprintf(output,"upscaler_result=native_size_guard_failed\n");return false;}
     }
     if(restore && (!display_aa_camera || gchandle_get_target(display_aa_camera)!=hg)){
-        fprintf(output,"upscaler_result=no_saved_camera\n");return;
+        fprintf(output,"upscaler_result=no_saved_camera\n");return false;
     }
     if(!restore && (!display_aa_camera || gchandle_get_target(display_aa_camera)!=hg)){
         if(display_aa_camera)gchandle_free(display_aa_camera);
@@ -295,12 +295,12 @@ static void display_upscaler(NSDictionary *command) {
     // requires split outputs; splitting alone breaks native snow materials.
     if((native || native_lighting_any()) && !graphics_gbuffer_retention(true)){
         display_last_result=@"光影缓冲未就绪，超分模式保持原设置";
-        fprintf(output,"upscaler_result=gbuffer_retention_failed\n");return;
+        fprintf(output,"upscaler_result=gbuffer_retention_failed\n");return false;
     }
     if(native && (!override_parameter(get_hub(),@"TransientGBuffer|RenderTargetSettings",@"0",false) ||
        !override_parameter(get_hub(),@"shouldSplitOnePass|OnePassDeferred",
                            native_lighting_any() ? @"1" : @"",!native_lighting_any()))){
-        fprintf(output,"upscaler_result=split_outputs_failed\n");return;
+        fprintf(output,"upscaler_result=split_outputs_failed\n");return false;
     }
     int value=restore ? display_aa_original : (temporal ? 8 : 2);bool ok=false;
     void *setArgs[]={&value};invoke(hg,"set_antialiasing",1,setArgs,&ok);
@@ -327,7 +327,7 @@ static void display_upscaler(NSDictionary *command) {
             override_parameter(get_hub(),@"TransientGBuffer|RenderTargetSettings",@"",true);
             if(graphics_profile_slot)graphics_gbuffer_retention(false);
         }
-        display_reapply_saved_preset();
+        if(!command[@"reapplyPreset"] || [command[@"reapplyPreset"] boolValue])display_reapply_saved_preset();
         display_upscaler_startup_pending=false;
         if([command[@"remember"] boolValue]){
             if(restore)[NSUserDefaults.standardUserDefaults removeObjectForKey:display_upscaler_key];
@@ -336,6 +336,7 @@ static void display_upscaler(NSDictionary *command) {
     }
     display_last_result=matches ? @"已应用" : @"游戏未采用画质模式";
     fprintf(output,"upscaler_result=%s mode=%s antialiasing=%d\n",matches ? "applied" : "failed",mode.UTF8String,object_int(hg,"get_antialiasing"));
+    return matches;
 }
 
 static void display_upscaler_startup_tick(void) {

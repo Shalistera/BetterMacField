@@ -23,7 +23,7 @@
           "value": 2160
         }
       ],
-      "help": "保持 16:9；窗口随输出尺寸调整，并适配屏幕可用区域。"
+      "help": ""
     },
     {
       "page": "画面",
@@ -40,11 +40,11 @@
           "value": "metalfx-native"
         },
         {
-          "title": "MetalFX Spatial · 测试版默认",
+          "title": "MetalFX Spatial",
           "value": "metalfx-spatial"
         }
       ],
-      "help": "测试版默认 Spatial＋原生 TAAU，移动时有拖影。Temporal 保留实验入口，可能出现异常退出。"
+      "help": ""
     },
     {
       "page": "画面",
@@ -65,7 +65,7 @@
           "value": "性能"
         }
       ],
-      "help": "比例为场景渲染宽高相对输出的比例；UI 保持输出分辨率。"
+      "help": ""
     },
     {
       "page": "画面",
@@ -107,28 +107,28 @@
           "value": "pc-high"
         }
       ],
-      "help": "调整原生场景流送距离；已加载内容的切换可能需要移动或切换场景。"
+      "help": "已加载的远景可能延迟切换。"
     },
     {
       "page": "光影",
       "key": "selfShadow",
       "title": "角色自阴影",
       "default": true,
-      "help": "启用角色自身的原生阴影，保留场景光照与美术方向。"
+      "help": ""
     },
     {
       "page": "光影",
       "key": "characterLighting",
       "title": "角色光照与阴影滤波",
       "default": true,
-      "help": "适配脸部、身体与布料的着色公式，不替换模型或贴图。"
+      "help": ""
     },
     {
       "page": "光影",
       "key": "characterSpecular",
       "title": "角色 PC 高光公式 · 实验",
       "default": false,
-      "help": "单独切换已适配皮肤材质的 PC 高光公式，适合自行对比。"
+      "help": ""
     },
     {
       "page": "光影",
@@ -156,42 +156,63 @@
       "key": "gtao",
       "title": "GTAO 环境遮蔽",
       "default": true,
-      "help": "使用原版计算程序与场景参数，已改用深度重建法线修复地面闪烁方块。"
+      "help": ""
     },
     {
       "page": "光影",
       "key": "contact",
       "title": "接触阴影",
       "default": true,
-      "help": "补充近距离遮挡，使用原版接触阴影程序。"
+      "help": ""
     },
     {
       "page": "光影",
       "key": "ssr",
       "title": "屏幕空间反射 SSR",
       "default": false,
-      "help": "反射当前屏幕内的内容；会增加 GPU 负载。"
+      "help": ""
     },
     {
       "page": "操作",
       "key": "keyboard",
       "title": "自动键鼠模式",
       "default": true,
-      "help": "Shift / E、长按 R 转盘；滚轮控制镜头，按住 Alt／Option＋滚轮切换交互选项；SDK 与浏览器仍可点击。"
+      "help": "滚轮缩放镜头；Alt／Option＋滚轮选择交互项。"
     },
     {
       "page": "操作",
       "key": "backgroundLimit",
       "title": "后台节能 · 15 FPS",
       "default": true,
-      "help": "切回游戏后恢复进入后台前的帧率设置。"
+      "help": ""
     },
     {
       "page": "操作",
       "key": "metalHUD",
       "title": "启动时显示 Metal HUD",
       "default": true,
-      "help": "游戏顶部 Metal HUD 菜单提供类型、位置和指标；可用项随 macOS 版本变化。"
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "compareRendering",
+      "title": "对比时使用 TAAU · 50% 渲染",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "compareLOD",
+      "title": "对比时恢复手机 LOD",
+      "default": true,
+      "help": ""
+    },
+    {
+      "page": "操作",
+      "key": "privateUID",
+      "title": "UID 显示为「不给你看」",
+      "default": false,
+      "help": ""
     }
   ]
 }
