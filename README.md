@@ -50,4 +50,4 @@ python3 bettermacfield.py --region cn launch
 
 ## 已知情况
 
-macOS 27 上的完整开发版曾发生 Temporal / ANE 断言退出，目前尚未确定触发条件，因此默认 TAAU。Spatial 有移动拖影。LOD 恢复后驻留内容由游戏释放。地图与角色覆盖范围、实际验证和已知问题见 [验证记录](docs/validation.md)，实现与更新适配见 [架构](docs/architecture.md)。
+macOS 27 上，早期精简核心与完整开发版均曾发生 Temporal / ANE 断言退出，目前尚未确定触发条件，因此默认 TAAU，Temporal 入口保留。Spatial 有移动拖影。LOD 恢复后驻留内容由游戏释放。地图与角色覆盖范围、实际验证和已知问题见 [验证记录](docs/validation.md)，实现与更新适配见 [架构](docs/architecture.md)。
