@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the asset-free native launcher package; end users need no Python/Xcode."""
+"""Build the native graphics launcher package; end users need no Python/Xcode."""
 import hashlib
 import json
 from pathlib import Path
@@ -21,13 +21,22 @@ def main():
     # Keep one current package and build in place; no versioned backup copies.
     library = resources/'libBetterMacField.dylib'
     shutil.copy2(bmf.LIBRARY, library)
+    graphics = bmf.BUILD/'Graphics'
+    if not (graphics/'endfield-ios-ao-patches.json').is_file():
+        raise RuntimeError('Prepare the verified local graphics export with prepare_graphics.py first.')
+    if (resources/'Graphics').exists():
+        shutil.rmtree(resources/'Graphics')
+    shutil.copytree(graphics, resources/'Graphics')
+    shutil.copy2(bmf.ROOT/'launcher/features.json', resources/'features.json')
+    payload = {str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Graphics').rglob('*') if p.is_file()}
+    payload['features.json'] = hashlib.sha256((resources/'features.json').read_bytes()).hexdigest()
     profiles = {region: dict(bundleID=bundle, version='1.6.3', files=bmf.CN_EXPECTED if region == 'cn' else bmf.EXPECTED)
                 for region, bundle in bmf.CLIENTS.items()}
     (resources/'clients.json').write_text(json.dumps(dict(clients=profiles, displaySettings=bmf.DISPLAY_SETTINGS,
-        runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest()), indent=2)+'\n')
+        runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest(), payload=payload), indent=2)+'\n')
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='io.shalistera.BetterMacField',
         CFBundleName='BetterMacField', CFBundleDisplayName='BetterMacField', CFBundleExecutable='BetterMacField',
-        CFBundlePackageType='APPL', CFBundleShortVersionString='0.2.0', CFBundleVersion='2',
+        CFBundlePackageType='APPL', CFBundleShortVersionString='0.3.0', CFBundleVersion='3',
         LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True)))
     subprocess.run(['xcrun', 'clang', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=13.0',
         '-Wno-deprecated-declarations', '-framework', 'AppKit', '-framework', 'Foundation',

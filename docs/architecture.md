@@ -1,30 +1,21 @@
 # 架构与版本适配
 
-`bettermacfield.py` 负责精确客户端校验、本地编译、单进程启动和 PlayCover 设置恢复。`launcher/main.m` 提供相同客户端身份校验和设置恢复的原生启动入口，`build_release.py` 把本项目动态库与客户端指纹打包；玩家使用打包版时无需编译环境。两种入口共用动态库内的设置初始化。客户端资源与模型工具不参与构建。`src/core.m` 将以下组件组成一个 arm64 动态库：
+原生 Launcher `launcher/main.m` 负责区域选择、设置页、客户端/组件校验、临时注入、运行反馈和 PlayCover 设置恢复。`launcher/features.json` 是 Launcher 与游戏菜单共用的功能表，避免两套 UI 丢失选项。每服分别保存偏好、命令与状态，更新命令带独立 ID；界面等待对应回复，避免旧状态覆盖刚保存的选择。
 
-- `engine.inc`：IL2CPP API 绑定、原生参数系统与角色自阴影 Volume override。
-- `input_*.inc`、`keyboard_input.inc`、HUD 与菜单模块：AppKit 事件接入现有游戏输入，沿用原始技能和交互回调。SDK/网页覆盖层出现时释放捕获。
-- `display.inc`、`game_settings.inc`、`scene_lod.inc`：输出/内部渲染比例、16:9 窗口、原生设置页面与 Streaming 参数。
-- `metal_hooks.inc`、`metal_library.inc`：在进程中识别现有 Metal library SHA-256，跟踪原始 TAAU 输入和后处理边界；不导出或替换游戏着色器。
-- `native_taau_metalfx.inc`：原生 TAAU 插入点的 Temporal；运动矢量从游戏打包格式转换为 RG16Float，使用同一帧原始颜色和深度。
-- `native_spatial.inc`：原生后处理之后、UI 合成之前的 Spatial，RGBA8Unorm perceptual 输入。
-- `graphics_bridge.inc`、`gbuffer_retention.inc`、`native_temporal_size.inc`：经函数/布局校验的缓冲保留与输出尺寸适配，保留原生 C++ 光照。
-- `metal_hud.inc`、`background_perf.inc`：系统 HUD 菜单、后台帧率。
+`src/core.m` 组合以下运行组件：
 
-## Temporal 的 jitter 修复
+- `engine.inc`：IL2CPP API、原生参数与自阴影 Volume。
+- 输入、键盘、HUD 模块：将 AppKit 事件送入原游戏逻辑，SDK/网页覆盖层释放捕获。
+- `display.inc`、`game_settings.inc`、`scene_lod.inc`：输出/内部渲染比例、16:9 窗口、原生设置和场景流送。
+- `graphics_runtime.inc`、`metal_library_trace.inc`、`metal_bindings.inc`：按实际 library SHA-256 识别图形程序和输入；绑定经过适配的光影程序。
+- `managed_gbuffer_inputs.inc`、`graphics_mode.inc`、`native_temporal_size.inc`：保留有效深度与场景输入，执行前分别验证指令和字段布局。
+- `official_gtao_runtime.inc`：原版 GTAO 程序、参数与历史帧。移动端地形预通道未写材质法线，改用游戏自带深度重建法线变体解决方块闪烁。
+- `official_contact_runtime.inc`：原版接触阴影程序与当前场景光源。
+- `character_skin.inc`、`metal_ssr_history.inc`：匹配角色着色与屏幕空间反射输入，不替换模型、贴图。
+- `native_taau_metalfx.inc` / `native_spatial.inc`：原生 TAAU 输入上的 Temporal，以及原版抗锯齿之后的 Spatial。Temporal 的采样相位使用已经验证的 (-X, -Y) 符号。
+- `settings.inc`、`menu.inc`：偏好、实时命令、一键对比快照；对比状态不写入用户配置。
+- `metal_hud.inc`、`background_perf.inc`：系统 HUD 与可关闭的后台帧率限制。
 
-桥接使用原生 TAAU pass 的全局参数，而不是 managed Camera 的 jitter。GPU 同帧采样确认原始颜色在纹理坐标中的位移约为 `(-jitterX, -jitterY)`。旧桥接使用 `(+X, -Y)`，造成横向采样相位不匹配；修正为 `(-X, -Y)` 后，静止远景中的周期性横向晃动显著下降，用户动态试玩确认改善。
+`prepare_graphics.py` 只接受已校验的渲染程序导出，输出到 Git 忽略的构建目录；`build_release.py` 将它和动态库、功能表打包并生成组件哈希。源码许可证与该本地输入分别处理，见 NOTICE。运行时所有文件复制到所选客户端自己的容器，着色器清单的路径在复制时重定位。
 
-运动矢量仍使用原生数据，未用全部清零的诊断方案替代动态重投影。切换模式、分辨率或相机时重置历史，正常帧连续累积。Spatial 使用原版抗锯齿结果，当前已知有移动拖影。
-
-## 客户端更新
-
-当前公开版本只接受 README 标注的国际服与国服 1.6.3 构建。国服使用独立 UnityFramework 指纹、输入 icall 包装器、C++ 渲染入口和 GBuffer 配置检查。两服使用各自容器的 `Data/tmp/BetterMacField`，避免受沙盒限制时公共 `/private/tmp` 写入失败。更新时依次重新核对：
-
-1. UnityFramework 和 global-metadata 的完整身份；禁止只改哈希强行通过。
-2. IL2CPP 类型、参数类型、布局与现有回调的含义。
-3. `graphics_bridge.inc`、`native_temporal_size.inc` 和键鼠 icall 包装器的预期代码/字段；每个本地绑定继续保留独立身份校验。
-4. TAAU 与最终后处理的 Metal library 身份、纹理格式、尺寸、jitter 和运动矢量约定。
-5. 在实际场景抽查自阴影开关、Temporal/TAAU 对照、键鼠释放与窗口尺寸。
-
-本项目源文件里的函数指纹和布局信息是适配数据。MIT 覆盖本项目工具实现，不授予游戏客户端或提取资源的再分发权。模型/材质移植与额外光照着色器的生成流程在后续单独设计。
+更新适配依次核对客户端完整身份、IL2CPP 类型与参数、预期指令与字段偏移、着色器身份/绑定、TAAU 的颜色/深度/运动矢量/jitter约定，最后在实际场景抽查输入、光影、超分与对比往返。国服与国际服使用独立二进制指纹和必要的区域 RVA。

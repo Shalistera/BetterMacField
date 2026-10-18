@@ -265,7 +265,7 @@ static void display_upscaler(NSDictionary *command) {
     int multipass=0;void *args[]={camera,&multipass};
     void *hg=camera ? input_static(find_class("HG.Rendering.Runtime","HGCamera"),"TryGet",2,args) : NULL;
     if(!hg){fprintf(output,"upscaler_result=no_camera\n");return;}
-    bool restore=[mode isEqual:@"restore"],temporal=false;
+    bool restore=[mode isEqual:@"restore"],temporal=[mode isEqual:@"metalfx-temporal"];
     bool native=[mode isEqual:@"metalfx-native"],spatial=[mode isEqual:@"metalfx-spatial"];
     bool nativeUpscale=native || spatial;
     if(!restore && !temporal && !nativeUpscale && ![mode isEqual:@"taau"]){fprintf(output,"upscaler_result=invalid_mode\n");return;}
@@ -293,13 +293,13 @@ static void display_upscaler(NSDictionary *command) {
     }
     // MetalFX consumes the original TAAU inputs. Only screen-space lighting
     // requires split outputs; splitting alone breaks native snow materials.
-    if((native) && !graphics_gbuffer_retention(true)){
+    if((native || native_lighting_any()) && !graphics_gbuffer_retention(true)){
         display_last_result=@"光影缓冲未就绪，超分模式保持原设置";
         fprintf(output,"upscaler_result=gbuffer_retention_failed\n");return;
     }
     if(native && (!override_parameter(get_hub(),@"TransientGBuffer|RenderTargetSettings",@"0",false) ||
        !override_parameter(get_hub(),@"shouldSplitOnePass|OnePassDeferred",
-                           @"",true))){
+                           native_lighting_any() ? @"1" : @"",!native_lighting_any()))){
         fprintf(output,"upscaler_result=split_outputs_failed\n");return;
     }
     int value=restore ? display_aa_original : (temporal ? 8 : 2);bool ok=false;
@@ -319,8 +319,9 @@ static void display_upscaler(NSDictionary *command) {
         atomic_store(&native_temporal_bypass,false);
         atomic_store(&native_temporal_motion_mode,0);
         native_temporal_configure(nativeUpscale,width,height);
-        bool retain=native;
+        bool retain=native || native_lighting_any();
         managed_gbuffer_set_enabled(retain);
+        atomic_store(&native_decal_depth_enabled,native_lighting_any() && *cpp);
         if(!retain){
             override_parameter(get_hub(),@"shouldSplitOnePass|OnePassDeferred",@"",true);
             override_parameter(get_hub(),@"TransientGBuffer|RenderTargetSettings",@"",true);

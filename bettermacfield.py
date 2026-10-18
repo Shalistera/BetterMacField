@@ -154,23 +154,54 @@ def command(payload, timeout=15):
     raise RuntimeError('Runtime did not respond. Launch with BetterMacField and wait for the game menu.')
 
 
+def stage_graphics(runtime, bundle):
+    source = BUILD/'Graphics'
+    if not (source/'endfield-ios-ao-patches.json').is_file():
+        raise RuntimeError('Missing local graphics export. Run prepare_graphics.py before launching the full build.')
+    runtime.mkdir(parents=True, exist_ok=True)
+    for path in source.rglob('*'):
+        if not path.is_file():
+            continue
+        target = runtime/path.relative_to(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix == '.json':
+            prefix = json.dumps(str(runtime), ensure_ascii=False)[1:-1]
+            target.write_text(path.read_text().replace('${RUNTIME}', prefix))
+        else:
+            shutil.copy2(path, target)
+    shutil.copy2(ROOT/'launcher/features.json', runtime/'features.json')
+    fields = json.loads((ROOT/'launcher/features.json').read_text())['fields']
+    settings = {f['key']: f['default'] for f in fields}
+    region = next(key for key, value in CLIENTS.items() if value == bundle)
+    saved = STATE/f'settings-{region}.json'
+    if saved.exists():
+        settings.update(json.loads(saved.read_text()))
+    (runtime/'bettermacfield-settings.json').write_text(json.dumps(settings, ensure_ascii=False))
+    return settings
+
+
 def launch(app, restart):
     info = validate(app)
     runtime = configure_runtime(info['CFBundleIdentifier'])
     if running(app) and not restart:
         raise RuntimeError('Game is running. Close it or use launch --restart.')
     build()
+    if not (BUILD/'Graphics/endfield-ios-ao-patches.json').exists():
+        raise RuntimeError('Prepare the local graphics export before launching.')
     stop(app)
     apply_display(app)
-    runtime.mkdir(parents=True, exist_ok=True)
+    settings = stage_graphics(runtime, info['CFBundleIdentifier'])
     loaded_library = runtime/LIBRARY.name
     shutil.copy2(LIBRARY, loaded_library)
     COMMAND.unlink(missing_ok=True);STATUS.unlink(missing_ok=True)
     previous = LOG.stat().st_mtime_ns if LOG.exists() else 0
     subprocess.run(['open', '-n', '--env', f'DYLD_INSERT_LIBRARIES={loaded_library}',
                     '--env', f'BMF_RUNTIME_DIR={runtime}',
-                    '--env', 'MTL_HUD_ENABLED=1', '--env', 'MTL_HUD_DISABLE_MENU_BAR=0',
-                    str(app), '--args', '-MetalForceHudEnabled', 'YES'], check=True)
+                    '--env', f'ENDFIELD_AO_PATCHES_PATH={runtime}/endfield-ios-ao-patches.json',
+                    '--env', f'ENDFIELD_CHARACTER_SKIN_PATH={runtime}/endfield-ios-character-skin.json',
+                    '--env', f'ENDFIELD_OFFICIAL_GTAO_PATH={runtime}/endfield-official-gtao',
+                    '--env', 'MTL_HUD_ENABLED='+('1' if settings['metalHUD'] else '0'), '--env', 'MTL_HUD_DISABLE_MENU_BAR=0',
+                    str(app), '--args', '-MetalForceHudEnabled', 'YES' if settings['metalHUD'] else 'NO'], check=True)
     deadline = time.monotonic()+150
     while time.monotonic() < deadline:
         if LOG.exists() and LOG.stat().st_mtime_ns != previous and 'core=ready' in LOG.read_text():

@@ -1,0 +1,197 @@
+{
+  "fields": [
+    {
+      "page": "画面",
+      "key": "height",
+      "title": "输出分辨率",
+      "default": 1080,
+      "choices": [
+        {
+          "title": "1280 × 720",
+          "value": 720
+        },
+        {
+          "title": "1920 × 1080",
+          "value": 1080
+        },
+        {
+          "title": "2560 × 1440",
+          "value": 1440
+        },
+        {
+          "title": "3840 × 2160",
+          "value": 2160
+        }
+      ],
+      "help": "保持 16:9；窗口随输出尺寸调整，并适配屏幕可用区域。"
+    },
+    {
+      "page": "画面",
+      "key": "upscaler",
+      "title": "超分模式",
+      "default": "taau",
+      "choices": [
+        {
+          "title": "TAAU · 原版",
+          "value": "taau"
+        },
+        {
+          "title": "MetalFX Temporal · 原生环境光",
+          "value": "metalfx-native"
+        },
+        {
+          "title": "MetalFX Spatial · 备选",
+          "value": "metalfx-spatial"
+        }
+      ],
+      "help": "Temporal 支持动态重建；Spatial 沿用 TAAU 抗锯齿，移动时可能有拖影。"
+    },
+    {
+      "page": "画面",
+      "key": "quality",
+      "title": "超分质量",
+      "default": "质量",
+      "choices": [
+        {
+          "title": "质量 · 66.7%",
+          "value": "质量"
+        },
+        {
+          "title": "平衡 · 58.8%",
+          "value": "平衡"
+        },
+        {
+          "title": "性能 · 50%",
+          "value": "性能"
+        }
+      ],
+      "help": "比例为场景渲染宽高相对输出的比例；UI 保持输出分辨率。"
+    },
+    {
+      "page": "画面",
+      "key": "sharpen",
+      "title": "锐化",
+      "default": "original",
+      "choices": [
+        {
+          "title": "游戏默认",
+          "value": "original"
+        },
+        {
+          "title": "关闭 TAAU 锐化",
+          "value": "no-taau"
+        },
+        {
+          "title": "关闭全部锐化",
+          "value": "off"
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "画面",
+      "key": "lod",
+      "title": "场景 LOD 距离",
+      "default": "restore",
+      "choices": [
+        {
+          "title": "手机默认",
+          "value": "restore"
+        },
+        {
+          "title": "PC 中档",
+          "value": "pc-medium"
+        },
+        {
+          "title": "PC 高档",
+          "value": "pc-high"
+        }
+      ],
+      "help": "调整原生场景流送距离；已加载内容的切换可能需要移动或切换场景。"
+    },
+    {
+      "page": "光影",
+      "key": "selfShadow",
+      "title": "角色自阴影",
+      "default": true,
+      "help": "启用角色自身的原生阴影，保留场景光照与美术方向。"
+    },
+    {
+      "page": "光影",
+      "key": "characterLighting",
+      "title": "角色光照与阴影滤波",
+      "default": true,
+      "help": "适配脸部、身体与布料的着色公式，不替换模型或贴图。"
+    },
+    {
+      "page": "光影",
+      "key": "characterSpecular",
+      "title": "角色 PC 高光公式 · 实验",
+      "default": false,
+      "help": "单独切换已适配皮肤材质的 PC 高光公式，适合自行对比。"
+    },
+    {
+      "page": "光影",
+      "key": "shadowResolution",
+      "title": "阴影精度",
+      "default": 1024,
+      "choices": [
+        {
+          "title": "游戏默认",
+          "value": 0
+        },
+        {
+          "title": "1024",
+          "value": 1024
+        },
+        {
+          "title": "2048",
+          "value": 2048
+        }
+      ],
+      "help": ""
+    },
+    {
+      "page": "光影",
+      "key": "gtao",
+      "title": "GTAO 环境遮蔽",
+      "default": true,
+      "help": "使用原版计算程序与场景参数，已改用深度重建法线修复地面闪烁方块。"
+    },
+    {
+      "page": "光影",
+      "key": "contact",
+      "title": "接触阴影",
+      "default": true,
+      "help": "补充近距离遮挡，使用原版接触阴影程序。"
+    },
+    {
+      "page": "光影",
+      "key": "ssr",
+      "title": "屏幕空间反射 SSR",
+      "default": false,
+      "help": "反射当前屏幕内的内容；会增加 GPU 负载。"
+    },
+    {
+      "page": "操作",
+      "key": "keyboard",
+      "title": "自动键鼠模式",
+      "default": true,
+      "help": "包含 Shift / E、长按 R 转盘、滚轮交互；SDK 与内置浏览器仍可点击。"
+    },
+    {
+      "page": "操作",
+      "key": "backgroundLimit",
+      "title": "后台节能 · 15 FPS",
+      "default": true,
+      "help": "切回游戏后恢复进入后台前的帧率设置。"
+    },
+    {
+      "page": "操作",
+      "key": "metalHUD",
+      "title": "启动时显示 Metal HUD",
+      "default": true,
+      "help": "游戏顶部 Metal HUD 菜单提供类型、位置和指标；可用项随 macOS 版本变化。"
+    }
+  ]
+}
