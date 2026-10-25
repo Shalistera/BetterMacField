@@ -32,19 +32,19 @@
       "default": "metalfx-spatial",
       "choices": [
         {
-          "title": "TAAU · 原版",
-          "value": "taau"
+          "title": "MetalFX Spatial · 默认",
+          "value": "metalfx-spatial"
         },
         {
-          "title": "MetalFX Temporal · 实验",
+          "title": "MetalFX Temporal",
           "value": "metalfx-native"
         },
         {
-          "title": "MetalFX Spatial",
-          "value": "metalfx-spatial"
+          "title": "TAAU · 原版",
+          "value": "taau"
         }
       ],
-      "help": ""
+      "help": "Temporal 画面更好，但可能存在 bug。"
     },
     {
       "page": "画面",
@@ -108,6 +108,31 @@
         }
       ],
       "help": "已加载的远景可能延迟切换。"
+    },
+    {
+      "page": "画面",
+      "key": "vegetationDensity",
+      "title": "植被密度",
+      "default": 1,
+      "choices": [
+        {
+          "title": "游戏默认",
+          "value": -1
+        },
+        {
+          "title": "低 · 50%",
+          "value": 0.5
+        },
+        {
+          "title": "中 · 70%",
+          "value": 0.7
+        },
+        {
+          "title": "完整 · 100%",
+          "value": 1
+        }
+      ],
+      "help": "调整当前场景已有草丛、芦苇的显示密度；100% 完整显示。"
     },
     {
       "page": "光影",

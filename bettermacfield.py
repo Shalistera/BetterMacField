@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Build and launch BetterMacField against an explicitly supported PlayCover client."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,23 +23,8 @@ RESTORE = STATE / 'playcover-settings.json'
 LOG = Path('/private/tmp/bettermacfield-runtime.log')
 COMMAND = Path('/private/tmp/bettermacfield-command.json')
 STATUS = Path('/private/tmp/bettermacfield-status.json')
-EXPECTED = {
-    'Frameworks/UnityFramework.framework/UnityFramework': '767616ee9093e7ce8a588f30ed4beef3929d4adb0fcfb8ca100e7b8a77d4cb13',
-    'Data/Managed/Metadata/global-metadata.dat': '701d8556af6268bcb489bb7460e220f04b779a4002a9c8bf28de839a33ba5409',
-}
-CN_EXPECTED = dict(EXPECTED, **{
-    'Frameworks/UnityFramework.framework/UnityFramework': '3d0ecbe4c85d8be449c4bfac3503f46edf24dabd2f10270539d354bd8ac132e2',
-})
 DISPLAY_SETTINGS = dict(customScaler=2.0, resolution=6, resizableAspectRatioWidth=16,
                         resizableAspectRatioHeight=9, keymapping=False)
-
-
-def sha256(path):
-    h = hashlib.sha256()
-    with path.open('rb') as f:
-        for block in iter(lambda: f.read(4*1024*1024), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def validate(app):
@@ -50,9 +34,6 @@ def validate(app):
     bundle = info.get('CFBundleIdentifier')
     if bundle not in CLIENTS.values() or info.get('CFBundleShortVersionString') != '1.6.3':
         raise RuntimeError('Supported clients: global/CN iOS 1.6.3 only.')
-    for relative, expected in (CN_EXPECTED if bundle == CLIENTS['cn'] else EXPECTED).items():
-        if sha256(app/relative) != expected:
-            raise RuntimeError(f'Client build identity changed: {relative}. Update support before launching.')
     dependencies = subprocess.check_output(['xcrun', 'otool', '-L', str(app/'Endfield')], text=True)
     if 'PlayTools.framework/PlayTools' not in dependencies:
         raise RuntimeError('Install this client through PlayCover with PlayTools first.')

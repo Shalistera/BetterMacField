@@ -31,7 +31,7 @@ def main():
     shutil.copy2(bmf.ROOT/'launcher/AppIcon.icns', resources/'AppIcon.icns')
     payload = {str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Graphics').rglob('*') if p.is_file()}
     payload['features.json'] = hashlib.sha256((resources/'features.json').read_bytes()).hexdigest()
-    profiles = {region: dict(bundleID=bundle, version='1.6.3', files=bmf.CN_EXPECTED if region == 'cn' else bmf.EXPECTED)
+    profiles = {region: dict(bundleID=bundle, version='1.6.3')
                 for region, bundle in bmf.CLIENTS.items()}
     (resources/'clients.json').write_text(json.dumps(dict(clients=profiles, displaySettings=bmf.DISPLAY_SETTINGS,
         runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest(), payload=payload), indent=2)+'\n')

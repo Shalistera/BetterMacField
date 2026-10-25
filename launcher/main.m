@@ -4,6 +4,11 @@
 static void fail(NSString *message) {
     @throw [NSException exceptionWithName:@"BetterMacField" reason:message userInfo:nil];
 }
+static void compatibilityWarning(NSString *summary,NSString *guidance,NSString *diagnostic) {
+    @throw [NSException exceptionWithName:@"BMFClientCompatibility"
+        reason:[NSString stringWithFormat:@"%@\n%@\n\n排查信息（供反馈）：\n%@",summary,guidance,diagnostic]
+        userInfo:@{@"summary":summary,@"guidance":guidance}];
+}
 static NSDictionary *readJSON(NSString *path) {
     NSData *data=[NSData dataWithContentsOfFile:path];
     id value=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
@@ -73,20 +78,26 @@ static NSDictionary *loadSettings(NSString *region) {
     [v addEntriesFromDictionary:readJSON(preferencesPath(region)) ?: @{}];return v;
 }
 static NSString *restoreRecord(NSString *region) {return [stateRoot() stringByAppendingPathComponent:[region isEqual:@"cn"] ? @"playcover-settings-cn.json" : @"playcover-settings.json"];}
-static void validatePackage(NSString *region,NSString *appPath) {
+static void validatePackage(NSString *region,NSString *appPath,BOOL force) {
     NSDictionary *package=packageInfo(),*client=package[@"clients"][region];
     if(!client)fail(@"启动器缺少客户端配置。");
     NSDictionary *info=[NSDictionary dictionaryWithContentsOfFile:[appPath stringByAppendingPathComponent:@"Info.plist"]];
     if(!info)fail(@"没有找到客户端。请先在 PlayCover 安装对应服的 IPA，并启动游戏下载完资料。");
-    if(![info[@"CFBundleIdentifier"] isEqual:client[@"bundleID"]] || ![info[@"CFBundleShortVersionString"] isEqual:client[@"version"]])
-        fail(@"客户端版本不匹配。此包支持 iOS 1.6.3 的指定构建，请使用对应版本的 BetterMacField。");
-    for(NSString *relative in client[@"files"])
-        if(![sha256([appPath stringByAppendingPathComponent:relative]) isEqual:client[@"files"][relative]])
-            fail([@"客户端文件已改变，需要重新适配：" stringByAppendingString:relative]);
+    NSString *diagnostic=[NSString stringWithFormat:@"BetterMacField：%@（%@）\n所选服务器：%@\n支持的游戏版本：%@\n已安装的游戏版本：%@（%@）\n客户端标识：%@\n安装位置：%@",
+        [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"未知",
+        [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"未知",
+        [region isEqual:@"cn"] ? @"国服" : @"国际服",client[@"version"],
+        info[@"CFBundleShortVersionString"] ?: @"未知",info[@"CFBundleVersion"] ?: @"未知",info[@"CFBundleIdentifier"] ?: @"未知",appPath];
+    if(![info[@"CFBundleIdentifier"] isEqual:client[@"bundleID"]])
+        fail([NSString stringWithFormat:@"选择的服务器与已安装的游戏不一致。\n请切换到对应服务器，或在 PlayCover 中安装所选服务器的游戏。\n\n排查信息（供反馈）：\n%@",diagnostic]);
+    if(!force && ![info[@"CFBundleShortVersionString"] isEqual:client[@"version"]])
+        compatibilityWarning(@"游戏版本与当前 BetterMacField 适配的版本不同。",
+            [NSString stringWithFormat:@"当前游戏版本为 %@，此工具适配 %@。请按 BetterMacField 下载页的说明，使用相互匹配的工具版本和游戏安装包。\n也可以点击「仍然启动」继续；版本不兼容时可能闪退或出现功能异常。",
+                info[@"CFBundleShortVersionString"] ?: @"未知",client[@"version"]],diagnostic);
     NSString *resources=NSBundle.mainBundle.resourcePath;
-    if(![sha256([resources stringByAppendingPathComponent:@"libBetterMacField.dylib"]) isEqual:package[@"runtimeSHA256"]])fail(@"增强模块校验失败，请重新获取完整安装包。");
+    if(![sha256([resources stringByAppendingPathComponent:@"libBetterMacField.dylib"]) isEqual:package[@"runtimeSHA256"]])fail(@"BetterMacField 的增强组件已损坏或被修改。\n请重新下载并解压完整的 BetterMacField 安装包，再打开新解压的应用。");
     for(NSString *relative in package[@"payload"])
-        if(![sha256([resources stringByAppendingPathComponent:relative]) isEqual:package[@"payload"][relative]])fail([@"画质组件校验失败：" stringByAppendingString:relative]);
+        if(![sha256([resources stringByAppendingPathComponent:relative]) isEqual:package[@"payload"][relative]])fail([@"BetterMacField 的画质组件已损坏或被修改。\n请重新下载并解压完整的 BetterMacField 安装包，再打开新解压的应用。\n\n问题文件：" stringByAppendingString:relative]);
 }
 static void stopClient(NSString *region,BOOL restart) {
     NSString *bundle=packageInfo()[@"clients"][region][@"bundleID"];
@@ -151,6 +162,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
 @property BOOL busy;
 @property NSString *lastSettingsFingerprint;
 @property NSString *pendingRequest;
+@property NSString *lastError;
 @end
 @implementation BMFLauncher
 - (NSString *)region {return self.regions.indexOfSelectedItem==1 ? @"cn" : @"global";}
@@ -173,10 +185,15 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
 }
 - (void)changed:(id)sender {self.dirty=YES;self.status.stringValue=@"设置未保存";}
 - (void)regionChanged:(id)sender {
+    self.lastError=nil;
     [NSUserDefaults.standardUserDefaults setObject:self.region forKey:@"SelectedRegion"];
     [self showSettings:loadSettings(self.region)];self.dirty=NO;self.lastSettingsFingerprint=nil;[self refresh:nil];
 }
-- (void)error:(NSString *)message {self.status.stringValue=message;self.details.string=message;}
+- (void)error:(NSString *)message {
+    self.lastError=message;
+    self.status.stringValue=[NSString stringWithFormat:@"%@ 请在「状态与恢复」查看详情。",[message componentsSeparatedByString:@"\n"].firstObject];
+    self.details.string=message;
+}
 - (NSButton *)button:(NSString *)title action:(SEL)action frame:(NSRect)frame parent:(NSView *)parent {
     NSButton *b=[NSButton buttonWithTitle:title target:self action:action];b.frame=frame;[parent addSubview:b];return b;
 }
@@ -236,7 +253,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
             NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:NSMakeRect(16,92,672,278)];scroll.hasVerticalScroller=YES;scroll.borderType=NSBezelBorder;
             self.details=[[NSTextView alloc] initWithFrame:scroll.bounds];self.details.editable=NO;self.details.font=[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];self.details.autoresizingMask=NSViewWidthSizable;scroll.documentView=self.details;[page addSubview:scroll];
             [self button:@"校验客户端与组件" action:@selector(check:) frame:NSMakeRect(16,48,175,30) parent:page];
-            [self button:@"复制运行日志" action:@selector(copyLog:) frame:NSMakeRect(203,48,150,30) parent:page];
+            [self button:@"复制诊断信息" action:@selector(copyLog:) frame:NSMakeRect(203,48,150,30) parent:page];
             [self button:@"恢复 PlayCover 设置" action:@selector(restore:) frame:NSMakeRect(365,48,190,30) parent:page];
             NSTextField *help=label(@"恢复本工具修改的 PlayCover 设置。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
         }
@@ -253,7 +270,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
                 NSButton *toggle=[NSButton checkboxWithTitle:field[@"title"] target:self action:@selector(changed:)];toggle.frame=NSMakeRect(18,y-6,650,24);[page addSubview:toggle];self.controls[key]=toggle;
             }
             NSString *text=field[@"help"];if(text.length){NSTextField *help=label(text,11,NO);help.textColor=NSColor.secondaryLabelColor;help.frame=NSMakeRect(20,y-36,660,26);[page addSubview:help];}
-            y-=([name isEqual:@"画面"] ? 72 : 51);
+            y-=([name isEqual:@"画面"] ? 60 : 51);
         }
 
     }
@@ -279,25 +296,36 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
 - (void)busy:(BOOL)value {
     self.busy=value;self.launchButton.enabled=!value;self.applyButton.enabled=!value;self.regions.enabled=!value;
 }
-- (void)runCheck:(BOOL)launch {
+- (void)runCheck:(BOOL)launch force:(BOOL)force {
     if(self.busy)return;
+    self.lastError=nil;
     NSString *region=self.region,*path=clientPath(region);NSDictionary *settings=self.settings;
     @try{if(launch)[self save];}@catch(NSException *e){[self error:e.reason];return;}
     [self busy:YES];self.status.stringValue=@"正在校验客户端与画质组件…";
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
-        NSString *failure=nil,*runtime=nil;
-        @try {validatePackage(region,path);if(launch){stopClient(region,NO);runtime=prepareRuntime(region,path,settings);}}
-        @catch(NSException *e){failure=e.reason;}
+        NSException *failure=nil;NSString *runtime=nil;
+        @try {validatePackage(region,path,force);if(launch){stopClient(region,NO);runtime=prepareRuntime(region,path,settings);}}
+        @catch(NSException *e){failure=e;}
         dispatch_async(dispatch_get_main_queue(),^{
-            if(failure){[self busy:NO];[self error:failure];return;}
+            if(failure){
+                [self busy:NO];[self error:failure.reason];
+                if(launch && !force && [failure.name isEqual:@"BMFClientCompatibility"]){
+                    NSAlert *alert=[NSAlert new];alert.messageText=failure.userInfo[@"summary"];alert.informativeText=failure.userInfo[@"guidance"];
+                    [alert addButtonWithTitle:@"返回检查"];[alert addButtonWithTitle:@"仍然启动"];
+                    [alert beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response){
+                        if(response==NSAlertSecondButtonReturn)[self runCheck:YES force:YES];
+                    }];
+                }
+                return;
+            }
             if(!launch){[self busy:NO];self.status.stringValue=@"客户端与全部画质组件校验通过。";return;}
             self.status.stringValue=@"正在启动游戏；登录进入场景后自动应用设置…";
             launchClient(region,path,runtime,settings,^(NSError *error){[self busy:NO];if(error)[self error:error.localizedDescription];});
         });
     });
 }
-- (void)launch:(id)sender {[self runCheck:YES];}
-- (void)check:(id)sender {[self runCheck:NO];}
+- (void)launch:(id)sender {[self runCheck:YES force:NO];}
+- (void)check:(id)sender {[self runCheck:NO force:NO];}
 - (void)restore:(id)sender {
     @try {
         if([NSRunningApplication runningApplicationsWithBundleIdentifier:packageInfo()[@"clients"][self.region][@"bundleID"]].count)fail(@"请先关闭游戏，再恢复 PlayCover 设置。");
@@ -306,9 +334,10 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     }@catch(NSException *e){[self error:e.reason];}
 }
 - (void)copyLog:(id)sender {
-    NSString *text=[NSString stringWithContentsOfFile:[runtimeRoot(self.region) stringByAppendingPathComponent:@"bettermacfield-runtime.log"] encoding:NSUTF8StringEncoding error:nil];
-    if(!text){self.status.stringValue=@"尚无运行日志。";return;}
-    [NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:text forType:NSPasteboardTypeString];self.status.stringValue=@"运行日志已复制。";
+    NSString *log=[NSString stringWithContentsOfFile:[runtimeRoot(self.region) stringByAppendingPathComponent:@"bettermacfield-runtime.log"] encoding:NSUTF8StringEncoding error:nil];
+    NSMutableString *text=[NSMutableString stringWithString:self.details.string ?: @""];
+    if(log.length)[text appendFormat:@"\n\n最近一次游戏运行日志：\n%@",log];
+    [NSPasteboard.generalPasteboard clearContents];[NSPasteboard.generalPasteboard setString:text forType:NSPasteboardTypeString];self.status.stringValue=@"诊断信息已复制，可粘贴给发布者。";
 }
 - (void)refresh:(id)sender {
     if(self.busy)return;
@@ -319,7 +348,7 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     self.compareButton.enabled=live && [state[@"sceneReady"] boolValue];
     self.launchButton.enabled=!apps.count;
     NSString *prefix=apps.count ? (live ? @"增强模块已连接" : @"游戏运行中 · 等待增强模块连接") : @"游戏未运行";
-    if(!self.dirty)self.status.stringValue=[NSString stringWithFormat:@"%@%@",prefix,live ? [@" · " stringByAppendingString:state[@"settingsResult"] ?: @"就绪"] : @""];
+    if(!self.dirty && !self.lastError)self.status.stringValue=[NSString stringWithFormat:@"%@%@",prefix,live ? [@" · " stringByAppendingString:state[@"settingsResult"] ?: @"就绪"] : @""];
     BOOL acknowledged=!self.pendingRequest || ([self.pendingRequest isEqual:state[@"id"]] && ![state[@"settingsPending"] boolValue]);
     if(acknowledged)self.pendingRequest=nil;
     if(live && acknowledged && !self.dirty && [state[@"settings"] isKindOfClass:NSDictionary.class]){
@@ -329,13 +358,17 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
             @try{directory(stateRoot());writeJSON(state[@"settings"],preferencesPath(region));}@catch(NSException *e){}
         }
     }
-    NSMutableString *text=[NSMutableString stringWithFormat:@"%@\n客户端：%@\n版本：1.6.3\n安装位置：%@\n\n",prefix,[region isEqual:@"cn"] ? @"国服" : @"国际服",clientPath(region)];
+    NSDictionary *info=[NSDictionary dictionaryWithContentsOfFile:[clientPath(region) stringByAppendingPathComponent:@"Info.plist"]];
+    NSMutableString *text=[NSMutableString stringWithFormat:@"%@\n客户端：%@\n已安装版本：%@\n支持版本：%@\n安装位置：%@\n\n",prefix,[region isEqual:@"cn"] ? @"国服" : @"国际服",info[@"CFBundleShortVersionString"] ?: @"未找到",packageInfo()[@"clients"][region][@"version"],clientPath(region)];
     if(live){
         [text appendFormat:@"场景：%@\n画面对比：%@\nGTAO：%@ 帧 · %@ 错误\n接触阴影：%@ 帧 · %@ 错误\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",[state[@"comparisonBaseline"] boolValue] ? @"原生设置" : @"增强设置",state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
         NSDictionary *fx=state[@"metalFX"],*effective=state[@"effective"];
         [text appendFormat:@"超分：%@\nLOD：%@\nMetalFX：%@ 帧 · %@ 错误\n",effective[@"upscaler"] ?: @"—",effective[@"lod"] ?: @"—",fx[@"encodes"] ?: @0,fx[@"errors"] ?: @0];
+        NSNumber *density=effective[@"vegetationDensity"];
+        if([density isKindOfClass:NSNumber.class] && density.doubleValue>=0)
+            [text appendFormat:@"植被密度：%.0f%%\n",density.doubleValue*100];
     }
-    self.details.string=text;
+    self.details.string=self.lastError ? [NSString stringWithFormat:@"%@\n\n%@",self.lastError,text] : text;
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {return YES;}
 @end
@@ -351,8 +384,14 @@ int main(int argc,const char **argv) {
                 if(!packageInfo()[@"clients"][region])fail(@"未知客户端区域。");
                 NSString *path=argument(args,@"--app") ?: clientPath(region);
                 if(restore){stopClient(region,NO);displaySettings(path,restoreRecord(region),packageInfo()[@"displaySettings"],YES);puts("PlayCover settings restored.");return 0;}
-                validatePackage(region,path);
-                if(check){printf("Verified %s 1.6.3 and all packaged graphics programs.\n",region.UTF8String);return 0;}
+                BOOL force=[args containsObject:@"--force"];
+                validatePackage(region,path,force);
+                if(force)fprintf(stderr,"已按 --force 继续，忽略游戏版本匹配提示。\n");
+                if(check){
+                    if(force)puts("Packaged components verified; client compatibility override enabled.");
+                    else printf("Verified %s 1.6.3 and all packaged graphics programs.\n",region.UTF8String);
+                    return 0;
+                }
                 stopClient(region,[args containsObject:@"--restart"]);
                 NSDictionary *settings=loadSettings(region);NSString *runtime=prepareRuntime(region,path,settings);
                 [NSApplication sharedApplication];

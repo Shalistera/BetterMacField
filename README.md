@@ -6,13 +6,13 @@
 
 ## English
 
-BetterMacField adds keyboard/mouse integration and graphics controls to the iOS version of **Arknights: Endfield** running through **PlayCover** on Apple Silicon Macs. This source release covers the **0.3.5 launcher** and its runtime integration. It supports the pinned **CN and global iOS 1.6.3 builds**; CN is selected by default, and subsequent region choices are remembered.
+BetterMacField adds keyboard/mouse integration and graphics controls to the iOS version of **Arknights: Endfield** running through **PlayCover** on Apple Silicon Macs. The current source builds on the **0.3.5 launcher** with vegetation density controls and launcher improvements. It targets **CN and global iOS 1.6.3**; CN is selected by default, and subsequent region choices are remembered.
 
 ### Features
 
 | Page | Available controls |
 | --- | --- |
-| Graphics | 720p–2160p output; native TAAU, MetalFX Spatial and experimental Temporal; 66.7% / 58.8% / 50% rendering scale; sharpening; mobile / PC medium / PC high scene LOD |
+| Graphics | 720p–2160p output; MetalFX Spatial by default, optional Temporal, and native TAAU last in the menu; 66.7% / 58.8% / 50% rendering scale; sharpening; mobile / PC medium / PC high scene LOD; vegetation density at game default / 50% / 70% / 100% |
 | Lighting | Character self-shadows, character lighting and shadow filtering, shadow resolution, original GTAO, contact shadows, SSR and experimental PC character specular lighting |
 | Input | Keyboard/mouse integration, sprint and combo input handling, tool wheel, camera zoom, interaction selection, optional 15 FPS background limit and Metal HUD |
 | Experimental | Greyed “Replace with PC character high-detail models” and “Use EFMI MOD” placeholders; clicking either shows “Not available yet” |
@@ -22,11 +22,13 @@ BetterMacField adds keyboard/mouse integration and graphics controls to the iOS 
 
 The launcher and in-game menu share their settings. CN and global settings are stored separately. The public version has **no UID hiding, MOD loading, model/texture replacement or extraction functionality**. Additional GI experiments and private development features are outside this release.
 
+Vegetation density defaults to **100%** and adjusts existing grass and reeds through the game's native setting. It uses the installed mobile resources; selecting **Game default** restores the original density. Both the launcher and in-game menu expose this setting.
+
 ### Use
 
-Download the app ZIP from [Releases](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5). `SHA256SUMS.txt` is provided alongside it.
+The latest packaged release is [v0.3.5](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5), with `SHA256SUMS.txt` alongside the app ZIP. Vegetation controls and the launcher improvements described here were added to source after that release; use a local build for these additions.
 
-1. Install a supported IPA through PlayCover, launch it once, finish downloading the game data, then exit the game.
+1. Install a supported IPA through PlayCover. Enable **Block SleepSpamming** in the game's **Bypasses** settings, launch it successfully once through PlayCover, finish downloading the game data, then exit the game.
 2. Open a prepared `BetterMacField.app` package. Read the injection-risk notice: “Use” unlocks after **10 seconds**, “Do not use” exits immediately, and “Do not show again” is optional.
 3. Select the region and graphics settings, then launch the game. The packaged app requires no Python, Xcode or terminal.
 
@@ -47,8 +49,8 @@ BetterMacField adds another injected module on top of PlayCover and **may increa
 
 ### Current limits
 
-- Defaults: **1080p, quality preset, Spatial with the game's native TAAU antialiasing**, character lighting, GTAO and contact shadows. Existing user settings are preserved.
-- The current Spatial combination has motion trails. Temporal is experimental; ANE assertion failures have occurred on macOS 27, and their cause remains unresolved.
+- Defaults: **1080p, quality preset, MetalFX Spatial**, character lighting, GTAO and contact shadows. Existing user settings are preserved.
+- Spatial can show motion trails. Temporal offers better image quality but may still have bugs. After multiple release fixes, the maintainer reports mostly trouble-free personal use.
 - LOD changes follow the game's streaming and resource lifetime, so already-loaded scenery may not change immediately.
 - Validation primarily used an M1 Max on macOS 27. All maps, characters and macOS versions have not been covered. See [validation notes](docs/validation.md).
 
@@ -71,7 +73,7 @@ python3 bettermacfield.py launch
 python3 bettermacfield.py --region global launch
 ```
 
-The build produces `dist/BetterMacField.app`, `dist/BetterMacField-macOS-arm64.zip` and `dist/SHA256SUMS.txt`. The launcher checks exact client and payload identities and rejects unsupported client updates. See [architecture](docs/architecture.md) and [usage notes](docs/quickstart.md) for details; these supporting documents are currently in Chinese.
+The build produces `dist/BetterMacField.app`, `dist/BetterMacField-macOS-arm64.zip` and `dist/SHA256SUMS.txt`. The launcher checks the client region, version and packaged components. Clients with different signatures can launch directly. If the game version differs, it offers **Launch anyway**. The packaged launcher's command-line equivalent is `--launch --force`. See [architecture](docs/architecture.md) and [usage notes](docs/quickstart.md) for details; these supporting documents are currently in Chinese.
 
 ### License
 
@@ -79,13 +81,13 @@ The project's launcher and integration source are released under [MIT](LICENSE).
 
 ## 简体中文
 
-BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**》iOS 客户端补充 macOS 键鼠和画面设置。本次开源范围为 **0.3.5 启动器及其运行模块**，适配国服、国际服 **iOS 1.6.3 的指定构建**。首次使用默认国服，之后记住用户选择。
+BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**》iOS 客户端补充 macOS 键鼠和画面设置。当前源码在 **0.3.5 启动器及其运行模块** 基础上增加植被密度和启动器改进，适配国服、国际服 **iOS 1.6.3**。首次使用默认国服，之后记住用户选择。
 
 ### 功能
 
 | 页面 | 可用功能 |
 | --- | --- |
-| 画面 | 720p–2160p；原版 TAAU、MetalFX Spatial、实验性 Temporal；66.7% / 58.8% / 50% 渲染比例；锐化；手机 / PC 中档 / PC 高档场景 LOD |
+| 画面 | 720p–2160p；默认 MetalFX Spatial、可选 Temporal、菜单末位保留原版 TAAU；66.7% / 58.8% / 50% 渲染比例；锐化；手机 / PC 中档 / PC 高档场景 LOD；植被密度：游戏默认 / 50% / 70% / 100% |
 | 光影 | 角色自阴影、角色光照与阴影滤波、阴影精度、原版 GTAO、接触阴影、SSR、实验性角色 PC 高光 |
 | 操作 | 键鼠接入、冲刺与连续技输入处理、工具转盘、镜头缩放、交互项选择、可关闭的后台 15 FPS 限制、Metal HUD |
 | 实验性功能 | “替换PC版角色高模”“使用EFMIMOD”两个灰色占位按钮，点击显示“暂未开放” |
@@ -95,11 +97,13 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 
 启动器与游戏内菜单共用设置，国服和国际服分别保存。公开版**不包含隐藏 UID、MOD 加载、模型／贴图替换及提取功能**。额外 GI 实验和私人开发功能留在本地。
 
+植被密度默认 **100%**，通过游戏原生参数调整当前场景已有草丛、芦苇等植被，使用已安装的移动端资源。启动器和游戏内菜单均可切换档位；选择「游戏默认」会恢复原有密度。
+
 ### 使用
 
-从 [Releases](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5) 下载应用 ZIP，同页提供 `SHA256SUMS.txt` 校验文件。
+当前预编译包为 [v0.3.5](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5)，同页提供应用 ZIP 和 `SHA256SUMS.txt`。本文中的植被设置及启动器改进已加入该版本之后的源码，可通过本地构建使用。
 
-1. 在 PlayCover 安装对应版本 IPA，启动游戏下载完资料后退出。
+1. 在 PlayCover 安装对应版本 IPA，在游戏设置的「绕过」中开启 **Block SleepSpamming**，再从 PlayCover 成功运行一次游戏，下载完资料后退出。
 2. 打开已打包的 `BetterMacField.app`，阅读注入风险提示。**10 秒**后可点击“使用”；“不使用”立即退出，可勾选“下次不提示”。
 3. 选择服务器和设置，点击“启动游戏”。使用打包应用无需 Python、Xcode 或终端。
 
@@ -120,8 +124,8 @@ BetterMacField 在 PlayCover 基础上额外注入增强模块，**可能增加�
 
 ### 当前限制
 
-- 默认 **1080p、质量档、Spatial＋原生 TAAU 抗锯齿**，开启角色光照、GTAO 和接触阴影；已有设置会保留。
-- 当前 Spatial 组合存在移动拖影。Temporal 为实验选项，macOS 27 上曾出现 ANE 断言退出，根因尚未解决。
+- 默认 **1080p、质量档、MetalFX Spatial**，开启角色光照、GTAO 和接触阴影；已有设置会保留。
+- Spatial 可能出现移动拖影。Temporal 画面更好，但可能存在 bug；维护者反馈，正式版多次修复后的个人使用基本未遇到问题。
 - LOD 变化遵循游戏的资源流送和释放，已加载的远景可能延迟变化。
 - 主要验证环境是 M1 Max、macOS 27，尚未覆盖全部地图、角色及系统版本。详见[验证记录](docs/validation.md)。
 
@@ -144,7 +148,7 @@ python3 bettermacfield.py launch
 python3 bettermacfield.py --region global launch
 ```
 
-产物为 `dist/BetterMacField.app`、`dist/BetterMacField-macOS-arm64.zip` 和 `dist/SHA256SUMS.txt`。启动器精确校验客户端与组件，客户端更新后会拒绝加载不匹配的适配。详见[架构](docs/architecture.md)及[使用说明](docs/quickstart.md)。
+产物为 `dist/BetterMacField.app`、`dist/BetterMacField-macOS-arm64.zip` 和 `dist/SHA256SUMS.txt`。启动器检查客户端区域、版本与包内组件；不同签名的客户端可直接启动，游戏版本不一致时提供「仍然启动」。打包后的启动器命令行可用 `--launch --force` 执行相同操作。详见[架构](docs/architecture.md)及[使用说明](docs/quickstart.md)。
 
 ### 许可证
 

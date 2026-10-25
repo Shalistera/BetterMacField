@@ -2,6 +2,18 @@ static NSString *const core_shadow_key=@"BetterMacFieldShadowResolution";
 static bool core_shadow_pending=true;
 static int core_shadow_current;
 static bool core_comparison_active;
+static bool core_vegetation_density(NSNumber *value) {
+    double density=value.doubleValue;
+    if(density!=-1 && density!=0.5 && density!=0.7 && density!=1)return false;
+    bool restore=density==-1;
+    bool ok=override_parameter(get_hub(),@"GrassGlobalSparsity|Grass",
+                               restore ? nil : value.stringValue,restore);
+    NSNumber *effective=display_feature_parameters(@"Grass")[@"GrassGlobalSparsity"];
+    ok=ok && effective && (restore || fabs(effective.doubleValue-density)<0.00001);
+    fprintf(output,"vegetation_density=%s requested=%.2f effective=%.2f\n",
+            ok ? "applied" : "failed",density,effective ? effective.doubleValue : -1);
+    return ok;
+}
 static bool core_shadow_resolution(int resolution,bool remember) {
     if(resolution!=0 && resolution!=1024 && resolution!=2048)return false;
     bool ok=true;
@@ -109,9 +121,10 @@ static void bmf_apply_settings(void) {
     if(v[@"sharpen"])display_sharpen(v[@"sharpen"]);
     if(v[@"lod"])scene_lod_control(@{@"profile":v[@"lod"],@"remember":@YES});
     bool ok=true;
+    if(v[@"vegetationDensity"])ok=core_vegetation_density(v[@"vegetationDensity"]) && ok;
     if(v[@"upscaler"]){
         BOOL expected=![v[@"upscaler"] isEqual:@"taau"];
-        ok=(atomic_load(&native_temporal_enabled)==expected);
+        ok=(atomic_load(&native_temporal_enabled)==expected) && ok;
         if(expected)ok=ok && (atomic_load(&native_spatial_enabled)==[v[@"upscaler"] isEqual:@"metalfx-spatial"]);
     }
     if(v[@"selfShadow"])ok=override_volume(@"HGCharacterVolume",@{@"enabled":v[@"selfShadow"],@"remember":@YES},false) && ok;
@@ -130,7 +143,7 @@ static void bmf_apply_settings(void) {
         input_auto_configure(@{@"enabled":@(enabled)});
     }
     if(v[@"backgroundLimit"])bmf_background_limit=[v[@"backgroundLimit"] boolValue];
-    bmf_settings_result=ok ? @"设置已应用" : @"部分光影未就绪，查看运行状态与日志";
+    bmf_settings_result=ok ? @"设置已应用" : @"部分设置未就绪，查看运行状态与日志";
     fprintf(output,"launcher_settings=%s\n",ok ? "applied" : "partial");
 }
 @interface BMFMenu : NSObject<NSMenuDelegate>
@@ -201,7 +214,8 @@ static void core_status(NSString *identifier) {
     NSDictionary *state=@{@"id":identifier ?: @"",@"pid":@(getpid()),@"updatedAt":@(NSDate.date.timeIntervalSince1970),
         @"sceneReady":@(input_scene_is_loaded()),@"selfShadow":@(character_shadow_override_enabled),@"shadowResolution":@(core_shadow_current),
         @"comparisonBaseline":@(core_comparison_active),
-        @"effective":@{@"upscaler":bmf_upscaler_mode(),@"renderScale":display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"] ?: @0,@"lod":scene_lod_selected_profile()},
+        @"effective":@{@"upscaler":bmf_upscaler_mode(),@"renderScale":display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"] ?: @0,@"lod":scene_lod_selected_profile(),
+            @"vegetationDensity":display_feature_parameters(@"Grass")[@"GrassGlobalSparsity"] ?: @(-1)},
         @"metalFX":native_temporal_state(),@"lighting":bmf_lighting_state(),
         @"gtaoEncodes":@(atomic_load(&official_gtao_encodes)),@"gtaoErrors":@(atomic_load(&official_gtao_errors)),
         @"contactEncodes":@(atomic_load(&official_contact_encodes)),@"contactErrors":@(atomic_load(&official_contact_errors)),
