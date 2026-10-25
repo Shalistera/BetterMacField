@@ -27,9 +27,17 @@ def main():
     if (resources/'Graphics').exists():
         shutil.rmtree(resources/'Graphics')
     shutil.copytree(graphics, resources/'Graphics')
+    vegetation = bmf.BUILD/'Vegetation'
+    manifest = json.loads((vegetation/'manifest.json').read_text())
+    if not manifest.get('bundles') or manifest.get('pcModels') or manifest.get('pcTextures'):
+        raise RuntimeError('Prepare the native-assets vegetation export with prepare_vegetation.py first.')
+    if (resources/'Vegetation').exists():
+        shutil.rmtree(resources/'Vegetation')
+    shutil.copytree(vegetation, resources/'Vegetation')
     shutil.copy2(bmf.ROOT/'launcher/features.json', resources/'features.json')
     shutil.copy2(bmf.ROOT/'launcher/AppIcon.icns', resources/'AppIcon.icns')
     payload = {str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Graphics').rglob('*') if p.is_file()}
+    payload.update({str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Vegetation').rglob('*') if p.is_file()})
     payload['features.json'] = hashlib.sha256((resources/'features.json').read_bytes()).hexdigest()
     profiles = {region: dict(bundleID=bundle, version='1.6.3')
                 for region, bundle in bmf.CLIENTS.items()}
@@ -37,7 +45,7 @@ def main():
         runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest(), payload=payload), indent=2)+'\n')
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='io.shalistera.BetterMacField',
         CFBundleName='BetterMacField', CFBundleDisplayName='BetterMacField', CFBundleExecutable='BetterMacField',
-        CFBundlePackageType='APPL', CFBundleShortVersionString='0.3.5', CFBundleVersion='8', CFBundleIconFile='AppIcon',
+        CFBundlePackageType='APPL', CFBundleShortVersionString='0.4.0', CFBundleVersion='9', CFBundleIconFile='AppIcon',
         LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True)))
     subprocess.run(['xcrun', 'clang', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=13.0',
         '-Wno-deprecated-declarations', '-framework', 'AppKit', '-framework', 'Foundation',

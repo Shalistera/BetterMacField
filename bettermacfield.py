@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build and launch BetterMacField against an explicitly supported PlayCover client."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -121,6 +122,28 @@ def restore_display():
     print('Restored saved PlayCover display/key-mapping settings.')
 
 
+def restore_vegetation(runtime):
+    if runtime.name == 'BetterMacField' and runtime.parent.name == 'tmp':
+        runtime = runtime.parent.parent/'Library/Application Support/BetterMacField'
+    journal = runtime/'vegetation-files.plist'
+    if not journal.exists():
+        return
+    for entry in reversed(plistlib.loads(journal.read_bytes())):
+        path, backup = Path(entry['path']), Path(entry['backup'])
+        current = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+        if not backup.exists() and current == entry.get('previous'):
+            continue
+        if current and current != entry['installed']:
+            raise RuntimeError(f'Scene file changed after installation; keep the recovery journal: {path}')
+        if entry.get('previous') and not backup.exists():
+            raise RuntimeError('Vegetation backup is missing; keep the recovery journal.')
+        path.unlink(missing_ok=True)
+        if backup.exists():
+            backup.replace(path)
+    journal.unlink()
+    shutil.rmtree(runtime/'VegetationBackup', ignore_errors=True)
+
+
 def command(payload, timeout=15):
     identifier = uuid.uuid4().hex
     pending = COMMAND.with_suffix('.pending')
@@ -136,6 +159,7 @@ def command(payload, timeout=15):
 
 
 def stage_graphics(runtime, bundle):
+    restore_vegetation(runtime)
     source = BUILD/'Graphics'
     if not (source/'endfield-ios-ao-patches.json').is_file():
         raise RuntimeError('Missing local graphics export. Run prepare_graphics.py before launching the full build.')
@@ -151,6 +175,8 @@ def stage_graphics(runtime, bundle):
         else:
             shutil.copy2(path, target)
     shutil.copy2(ROOT/'launcher/features.json', runtime/'features.json')
+    if (BUILD/'Vegetation/manifest.json').is_file():
+        shutil.copytree(BUILD/'Vegetation', runtime/'Vegetation', dirs_exist_ok=True)
     fields = json.loads((ROOT/'launcher/features.json').read_text())['fields']
     settings = {f['key']: f['default'] for f in fields}
     region = next(key for key, value in CLIENTS.items() if value == bundle)
@@ -212,6 +238,7 @@ def main():
         elif args.action == 'restore-settings':
             if running(app):raise RuntimeError('Close the game before restoring its PlayCover settings.')
             restore_display()
+            restore_vegetation(LOG.parent)
     except (RuntimeError, OSError, subprocess.CalledProcessError, ValueError) as error:
         print(f'Error: {error}', file=sys.stderr);return 1
     return 0

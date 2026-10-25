@@ -32,6 +32,8 @@ static NSString *const character_shadow_saved_key=@"BetterMacFieldCharacterSelfS
 #include "ao_compose.inc"
 #include "display.inc"
 #include "game_settings.inc"
+#include "keyboard_settings.inc"
+#include "scene_vegetation.inc"
 #include "background_perf.inc"
 #include "metal_hud.inc"
 #include "menu.inc"
@@ -40,6 +42,7 @@ static dispatch_source_t core_timer;
 static bool core_settings_pending=true;
 static void core_start(void) {
     if(!bind_api() || !domain_get())return;
+    vegetation_startup_tick();
     hub_class=find_class("HG.Rendering.Runtime","HGRenderPipelineSettingHub");
     if(!get_hub())return;
     input_auto_configure(@{@"enabled":bmf_settings[@"keyboard"] ?: @YES});
@@ -50,6 +53,7 @@ static void core_start(void) {
     dispatch_source_set_event_handler(core_timer,^{@autoreleasepool {
         @try {
             core_command();
+            vegetation_startup_tick();
             input_auto_window_update();
             background_perf_tick();
             if(core_settings_pending && input_static(find_class("Beyond.Scripts.Quality","QualityManager"),"get_instance",0,NULL)){
@@ -82,6 +86,7 @@ __attribute__((constructor)) static void core_install(void) {
         setvbuf(output,NULL,_IOLBF,0);
         fprintf(output,"core=starting pid=%d\n",getpid());
         bmf_settings_load();
+        vegetation_prepare();
         [NSUserDefaults.standardUserDefaults registerDefaults:@{character_shadow_saved_key:@YES}];
         // Install Metal identity observers before scene shaders are loaded.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),dispatch_get_main_queue(),^{

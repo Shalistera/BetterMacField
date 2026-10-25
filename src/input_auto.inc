@@ -37,7 +37,7 @@ static bool input_auto_activate(void) {
        gchandle_get_target(input_move_player_handle)==input_game_controller())return false;
     if(!input_scene_is_ready())return false;
     input_buttons(false);input_move(false);input_bridge(false,false);input_capture(false);
-    input_tune(@{@"bindings":@YES,@"controller":@NO});
+    input_tune(@{@"bindings":@YES});
     // Restoring a lost bridge must not recreate an already selected keyboard HUD.
     if(!keyboard)select_input_mode(@"keyboard-ui");
     if(input_device_switch_pending())return false;

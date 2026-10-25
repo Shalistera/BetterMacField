@@ -20,3 +20,5 @@ __pycache__/
 *.bin
 *.log
 .env*
+*.bytes
+*.chk

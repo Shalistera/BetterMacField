@@ -15,3 +15,10 @@ not relicensed under MIT. No models, textures, Unity resource bundles, IPA
 files, or MOD payloads are included in this launcher package. The current
 packaging helper consumes a prepared local export; it is not yet a standalone
 extractor for arbitrary player installations.
+
+The optional native-assets vegetation package contains prepared scene chunks:
+original iOS scene records plus selected PC-authored instance definitions,
+placements and streaming ownership. Models, materials and textures are resolved
+from the installed iOS client. These game-derived scene records are local build
+inputs under build/Vegetation, excluded from the source repository and the MIT
+license. prepare_vegetation.py and tools/scene_vegetation.py are build-tool source.

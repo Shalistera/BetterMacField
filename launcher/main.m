@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <CommonCrypto/CommonDigest.h>
+#include "../src/vegetation_files.inc"
 
 static void fail(NSString *message) {
     @throw [NSException exceptionWithName:@"BetterMacField" reason:message userInfo:nil];
@@ -112,6 +113,7 @@ static void stopClient(NSString *region,BOOL restart) {
 }
 static NSString *prepareRuntime(NSString *region,NSString *appPath,NSDictionary *settings) {
     NSString *runtime=runtimeRoot(region),*resources=NSBundle.mainBundle.resourcePath;directory(runtime);
+    NSString *restoreError=vegetation_files_restore(runtime);if(restoreError)fail(restoreError);
     NSMutableDictionary *files=[packageInfo()[@"payload"] mutableCopy];files[@"libBetterMacField.dylib"]=packageInfo()[@"runtimeSHA256"];
     for(NSString *relative in files){
         NSString *name=[relative hasPrefix:@"Graphics/"] ? [relative substringFromIndex:9] : relative;
@@ -188,6 +190,8 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     self.lastError=nil;
     [NSUserDefaults.standardUserDefaults setObject:self.region forKey:@"SelectedRegion"];
     [self showSettings:loadSettings(self.region)];self.dirty=NO;self.lastSettingsFingerprint=nil;[self refresh:nil];
+    self.controls[@"keyboardBindings"].enabled=[self.region isEqual:@"global"];
+    self.controls[@"sceneVegetation"].enabled=[self.region isEqual:@"global"];
 }
 - (void)error:(NSString *)message {
     self.lastError=message;
@@ -239,23 +243,13 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     for(NSString *name in @[@"画面",@"光影",@"操作",@"实验性功能",@"状态与恢复"]){
         NSTabViewItem *tab=[[NSTabViewItem alloc] initWithIdentifier:name];tab.label=name;
         NSView *page=[[NSView alloc] initWithFrame:NSMakeRect(0,0,706,388)];tab.view=page;[tabs addTabViewItem:tab];
-        if([name isEqual:@"实验性功能"]){
-            CGFloat y=320;
-            for(NSString *title in @[@"替换PC版角色高模",@"使用EFMIMOD"]){
-                NSButton *button=[self button:title action:@selector(experimentalUnavailable:) frame:NSMakeRect(18,y,300,38) parent:page];
-                button.attributedTitle=[[NSAttributedString alloc] initWithString:title attributes:@{NSForegroundColorAttributeName:NSColor.disabledControlTextColor}];
-                button.toolTip=@"暂未开放";
-                y-=58;
-            }
-            continue;
-        }
         if([name isEqual:@"状态与恢复"]){
             NSScrollView *scroll=[[NSScrollView alloc] initWithFrame:NSMakeRect(16,92,672,278)];scroll.hasVerticalScroller=YES;scroll.borderType=NSBezelBorder;
             self.details=[[NSTextView alloc] initWithFrame:scroll.bounds];self.details.editable=NO;self.details.font=[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular];self.details.autoresizingMask=NSViewWidthSizable;scroll.documentView=self.details;[page addSubview:scroll];
             [self button:@"校验客户端与组件" action:@selector(check:) frame:NSMakeRect(16,48,175,30) parent:page];
             [self button:@"复制诊断信息" action:@selector(copyLog:) frame:NSMakeRect(203,48,150,30) parent:page];
             [self button:@"恢复 PlayCover 设置" action:@selector(restore:) frame:NSMakeRect(365,48,190,30) parent:page];
-            NSTextField *help=label(@"恢复本工具修改的 PlayCover 设置。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
+            NSTextField *help=label(@"恢复本工具修改的 PlayCover 设置与场景植被文件。",11,NO);help.frame=NSMakeRect(20,12,650,30);help.textColor=NSColor.secondaryLabelColor;[page addSubview:help];continue;
         }
         CGFloat y=362;
         for(NSDictionary *field in catalog()[@"fields"]){
@@ -270,7 +264,14 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
                 NSButton *toggle=[NSButton checkboxWithTitle:field[@"title"] target:self action:@selector(changed:)];toggle.frame=NSMakeRect(18,y-6,650,24);[page addSubview:toggle];self.controls[key]=toggle;
             }
             NSString *text=field[@"help"];if(text.length){NSTextField *help=label(text,11,NO);help.textColor=NSColor.secondaryLabelColor;help.frame=NSMakeRect(20,y-36,660,26);[page addSubview:help];}
-            y-=([name isEqual:@"画面"] ? 60 : 51);
+            y-=([name isEqual:@"实验性功能"] ? 70 : [name isEqual:@"画面"] ? (text.length ? 60 : 44) : 51);
+        }
+        if([name isEqual:@"实验性功能"]){
+            for(NSString *title in @[@"替换PC版角色高模",@"使用EFMIMOD"]){
+                NSButton *button=[self button:title action:@selector(experimentalUnavailable:) frame:NSMakeRect(18,y-6,300,38) parent:page];
+                button.attributedTitle=[[NSAttributedString alloc] initWithString:title attributes:@{NSForegroundColorAttributeName:NSColor.disabledControlTextColor}];
+                button.toolTip=@"暂未开放";y-=52;
+            }
         }
 
     }
@@ -330,7 +331,8 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     @try {
         if([NSRunningApplication runningApplicationsWithBundleIdentifier:packageInfo()[@"clients"][self.region][@"bundleID"]].count)fail(@"请先关闭游戏，再恢复 PlayCover 设置。");
         displaySettings(clientPath(self.region),restoreRecord(self.region),packageInfo()[@"displaySettings"],YES);
-        self.status.stringValue=@"PlayCover 设置已恢复。";
+        NSString *restoreError=vegetation_files_restore(runtimeRoot(self.region));if(restoreError)fail(restoreError);
+        self.status.stringValue=@"PlayCover 设置与场景植被文件已恢复。";
     }@catch(NSException *e){[self error:e.reason];}
 }
 - (void)copyLog:(id)sender {
@@ -363,6 +365,11 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     if(live){
         [text appendFormat:@"场景：%@\n画面对比：%@\nGTAO：%@ 帧 · %@ 错误\n接触阴影：%@ 帧 · %@ 错误\n",[state[@"sceneReady"] boolValue] ? @"已进入" : @"等待进入",[state[@"comparisonBaseline"] boolValue] ? @"原生设置" : @"增强设置",state[@"gtaoEncodes"],state[@"gtaoErrors"],state[@"contactEncodes"],state[@"contactErrors"]];
         NSDictionary *fx=state[@"metalFX"],*effective=state[@"effective"];
+        NSDictionary *frameRate=state[@"frameRate"];
+        if(frameRate)[text appendFormat:@"目标帧率：%@ FPS · 屏幕上限：%@ Hz\n",frameRate[@"target"] ?: @"—",frameRate[@"screenMaximum"] ?: @"—"];
+        NSDictionary *vegetation=state[@"sceneVegetation"],*bindings=state[@"keyboardBindings"];
+        if(vegetation)[text appendFormat:@"场景植被：%@%@\n",vegetation[@"result"] ?: @"—",[vegetation[@"restartRequired"] boolValue] ? @"（设置已保存，下次启动生效）" : @""];
+        if(bindings)[text appendFormat:@"自定义按键页面：%@\n",[bindings[@"tabVisible"] boolValue] ? @"已开放" : @"未开放"];
         [text appendFormat:@"超分：%@\nLOD：%@\nMetalFX：%@ 帧 · %@ 错误\n",effective[@"upscaler"] ?: @"—",effective[@"lod"] ?: @"—",fx[@"encodes"] ?: @0,fx[@"errors"] ?: @0];
         NSNumber *density=effective[@"vegetationDensity"];
         if([density isKindOfClass:NSNumber.class] && density.doubleValue>=0)
@@ -383,7 +390,7 @@ int main(int argc,const char **argv) {
                 NSString *region=argument(args,@"--region") ?: @"cn";
                 if(!packageInfo()[@"clients"][region])fail(@"未知客户端区域。");
                 NSString *path=argument(args,@"--app") ?: clientPath(region);
-                if(restore){stopClient(region,NO);displaySettings(path,restoreRecord(region),packageInfo()[@"displaySettings"],YES);puts("PlayCover settings restored.");return 0;}
+                if(restore){stopClient(region,NO);displaySettings(path,restoreRecord(region),packageInfo()[@"displaySettings"],YES);NSString *error=vegetation_files_restore(runtimeRoot(region));if(error)fail(error);puts("PlayCover settings and vegetation files restored.");return 0;}
                 BOOL force=[args containsObject:@"--force"];
                 validatePackage(region,path,force);
                 if(force)fprintf(stderr,"已按 --force 继续，忽略游戏版本匹配提示。\n");

@@ -1,12 +1,12 @@
 # BetterMacField
 
-**0.3.5 · macOS launcher and graphics/input integration for Arknights: Endfield**
+**0.4.0 · macOS launcher and graphics/input integration for Arknights: Endfield**
 
 [English](#english) · [简体中文](#简体中文)
 
 ## English
 
-BetterMacField adds keyboard/mouse integration and graphics controls to the iOS version of **Arknights: Endfield** running through **PlayCover** on Apple Silicon Macs. The current source builds on the **0.3.5 launcher** with vegetation density controls and launcher improvements. It targets **CN and global iOS 1.6.3**; CN is selected by default, and subsequent region choices are remembered.
+BetterMacField adds keyboard/mouse integration and graphics controls to the iOS version of **Arknights: Endfield** running through **PlayCover** on Apple Silicon Macs. Version **0.4.0** adds custom keyboard settings, a 120 FPS override and missing scene vegetation restoration under Experimental. It targets **CN and global iOS 1.6.3**; CN is selected by default, and subsequent region choices are remembered.
 
 ### Features
 
@@ -14,8 +14,8 @@ BetterMacField adds keyboard/mouse integration and graphics controls to the iOS 
 | --- | --- |
 | Graphics | 720p–2160p output; MetalFX Spatial by default, optional Temporal, and native TAAU last in the menu; 66.7% / 58.8% / 50% rendering scale; sharpening; mobile / PC medium / PC high scene LOD; vegetation density at game default / 50% / 70% / 100% |
 | Lighting | Character self-shadows, character lighting and shadow filtering, shadow resolution, original GTAO, contact shadows, SSR and experimental PC character specular lighting |
-| Input | Keyboard/mouse integration, sprint and combo input handling, tool wheel, camera zoom, interaction selection, optional 15 FPS background limit and Metal HUD |
-| Experimental | Greyed “Replace with PC character high-detail models” and “Use EFMI MOD” placeholders; clicking either shows “Not available yet” |
+| Input | Keyboard/mouse integration, sprint and combo input handling, tool wheel, camera zoom, interaction selection, optional 15 FPS background limit and Metal HUD (off by default) |
+| Experimental | Custom keyboard bindings, 120 FPS override, missing scene vegetation restoration; keyboard bindings and vegetation currently support global iOS 1.6.3. PC character models and EFMI MOD remain placeholders. |
 | Status & recovery | Client/component verification, runtime status, log copying and restoration of the PlayCover settings changed by this tool |
 
 **⌘G** switches between native and enhanced graphics. By default, the native comparison also selects **TAAU at 50% rendering scale and mobile LOD**; either option can be disabled. Press again to restore the captured enhanced settings. Output resolution stays unchanged, and comparison mode does not overwrite saved preferences.
@@ -24,9 +24,13 @@ The launcher and in-game menu share their settings. CN and global settings are s
 
 Vegetation density defaults to **100%** and adjusts existing grass and reeds through the game's native setting. It uses the installed mobile resources; selecting **Game default** restores the original density. Both the launcher and in-game menu expose this setting.
 
+The [iOS resource reuse plan](docs/ios-resource-reuse.md) tracks the separate static-vegetation restoration candidate, its PC scene-data dependencies and the work needed for public integration.
+
+The experimental **120 FPS** option changes both Unity's target frame rate and its display-link refresh request, lifting the original 60 FPS cap. **Game default** restores the captured gameplay cap. Background energy saving still requests 15 FPS. Actual frame rate depends on the display and scene workload; the global iOS 1.6.3 client has been verified rendering above 60 FPS. See [validation notes](docs/validation.md).
+
 ### Use
 
-The latest packaged release is [v0.3.5](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5), with `SHA256SUMS.txt` alongside the app ZIP. Vegetation controls and the launcher improvements described here were added to source after that release; use a local build for these additions.
+This document describes the 0.4.0 source. Packaged downloads and checksums are listed on the [Releases page](https://github.com/Shalistera/BetterMacField/releases).
 
 1. Install a supported IPA through PlayCover. Enable **Block SleepSpamming** in the game's **Bypasses** settings, launch it successfully once through PlayCover, finish downloading the game data, then exit the game.
 2. Open a prepared `BetterMacField.app` package. Read the injection-risk notice: “Use” unlocks after **10 seconds**, “Do not use” exits immediately, and “Do not show again” is optional.
@@ -63,7 +67,7 @@ python3 bettermacfield.py build
 python3 -m unittest discover -s tests
 ```
 
-A **complete graphics launcher package also requires a prepared local rendering-program export**. Those game-derived shader programs and binding files are not committed to this repository. An independent extraction workflow for arbitrary player installations is not included in 0.3.5.
+A **complete launcher package requires prepared local rendering-program and native-assets vegetation exports**. Run `prepare_graphics.py` with the rendering export and `prepare_vegetation.py` with the local 1.6.3 research export before `build_release.py`. The latter needs Python `lz4`; its inputs are described in [the resource reuse notes](docs/ios-resource-reuse.md). Game-derived data stays under ignored `build/` and `dist/` directories. Player-side extraction tools are not part of this release.
 
 ```sh
 python3 prepare_graphics.py /path/to/local-rendering-export
@@ -81,7 +85,7 @@ The project's launcher and integration source are released under [MIT](LICENSE).
 
 ## 简体中文
 
-BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**》iOS 客户端补充 macOS 键鼠和画面设置。当前源码在 **0.3.5 启动器及其运行模块** 基础上增加植被密度和启动器改进，适配国服、国际服 **iOS 1.6.3**。首次使用默认国服，之后记住用户选择。
+BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**》iOS 客户端补充 macOS 键鼠和画面设置。**0.4.0** 将修改键盘快捷键、120 帧解锁和缺失场景植被恢复加入实验性功能，适配国服、国际服 **iOS 1.6.3**。首次使用默认国服，之后记住用户选择。
 
 ### 功能
 
@@ -89,8 +93,8 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 | --- | --- |
 | 画面 | 720p–2160p；默认 MetalFX Spatial、可选 Temporal、菜单末位保留原版 TAAU；66.7% / 58.8% / 50% 渲染比例；锐化；手机 / PC 中档 / PC 高档场景 LOD；植被密度：游戏默认 / 50% / 70% / 100% |
 | 光影 | 角色自阴影、角色光照与阴影滤波、阴影精度、原版 GTAO、接触阴影、SSR、实验性角色 PC 高光 |
-| 操作 | 键鼠接入、冲刺与连续技输入处理、工具转盘、镜头缩放、交互项选择、可关闭的后台 15 FPS 限制、Metal HUD |
-| 实验性功能 | “替换PC版角色高模”“使用EFMIMOD”两个灰色占位按钮，点击显示“暂未开放” |
+| 操作 | 键鼠接入、冲刺与连续技输入处理、工具转盘、镜头缩放、交互项选择、可关闭的后台 15 FPS 限制、Metal HUD（默认关闭） |
+| 实验性功能 | 修改键盘快捷键、120 帧解锁、缺失场景植被恢复；按键页面和场景植被目前适配国际服 iOS 1.6.3。角色高模和 EFMIMOD 保留占位入口。 |
 | 状态与恢复 | 客户端及组件校验、运行状态、复制日志、恢复本工具修改的 PlayCover 设置 |
 
 **⌘G** 切换原生／增强画面。默认同时回退为 **TAAU＋50% 渲染和手机 LOD**，这两项可以分别取消；再按一次恢复先前的增强设置。输出分辨率保持不变，对比状态不会覆盖保存的偏好。
@@ -99,9 +103,13 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 
 植被密度默认 **100%**，通过游戏原生参数调整当前场景已有草丛、芦苇等植被，使用已安装的移动端资源。启动器和游戏内菜单均可切换档位；选择「游戏默认」会恢复原有密度。
 
+缺失场景植被恢复默认关闭，开关下次启动生效。模型、材质和贴图复用 iOS，场景摆放记录来自 PC；国服对应包仍待准备。数据依赖与验证情况另见[场景植被恢复与 iOS 资源复用](docs/ios-resource-reuse.md)。
+
+实验性 **120 FPS** 同时调整 Unity 目标帧率和显示刷新请求，解除原来的 60 FPS 上限。「游戏默认」恢复接管前的游戏帧率；后台节能继续请求 15 FPS。实际帧率受屏幕和场景负载影响，国际服 iOS 1.6.3 已验证渲染帧率超过 60 FPS。详见[验证记录](docs/validation.md)。
+
 ### 使用
 
-当前预编译包为 [v0.3.5](https://github.com/Shalistera/BetterMacField/releases/tag/v0.3.5)，同页提供应用 ZIP 和 `SHA256SUMS.txt`。本文中的植被设置及启动器改进已加入该版本之后的源码，可通过本地构建使用。
+本文对应 0.4.0 源码；公开安装包及校验值见 [Releases](https://github.com/Shalistera/BetterMacField/releases)。
 
 1. 在 PlayCover 安装对应版本 IPA，在游戏设置的「绕过」中开启 **Block SleepSpamming**，再从 PlayCover 成功运行一次游戏，下载完资料后退出。
 2. 打开已打包的 `BetterMacField.app`，阅读注入风险提示。**10 秒**后可点击“使用”；“不使用”立即退出，可勾选“下次不提示”。
@@ -138,7 +146,7 @@ python3 bettermacfield.py build
 python3 -m unittest discover -s tests
 ```
 
-**完整光影启动器还需要本地准备的渲染程序导出**，其中游戏衍生的着色程序和绑定文件没有提交到仓库。0.3.5 尚未提供面向任意玩家安装目录的独立提取流程。
+**完整启动器需要本地准备的渲染程序与场景植被导出**。维护者先运行 `prepare_graphics.py` 和 `prepare_vegetation.py`，再运行 `build_release.py`；植被构建使用 Python `lz4`，输入格式见[资源复用说明](docs/ios-resource-reuse.md)。游戏衍生数据保存在被忽略的 `build/`、`dist/` 内。当前提取准备由维护者完成，玩家使用准备好的安装包。
 
 ```sh
 python3 prepare_graphics.py /path/to/local-rendering-export

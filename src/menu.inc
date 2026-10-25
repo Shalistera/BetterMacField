@@ -122,6 +122,11 @@ static void bmf_apply_settings(void) {
     if(v[@"lod"])scene_lod_control(@{@"profile":v[@"lod"],@"remember":@YES});
     bool ok=true;
     if(v[@"vegetationDensity"])ok=core_vegetation_density(v[@"vegetationDensity"]) && ok;
+    if(v[@"keyboardBindings"]){
+        NSString *result=game_settings_keyboard_control(find_class("Beyond","GameSetting"),[v[@"keyboardBindings"] boolValue]);
+        ok=([@[@"enabled",@"already_enabled",@"disabled"] containsObject:result]) && ok;
+        fprintf(output,"keyboard_settings=%s\n",result.UTF8String);
+    }
     if(v[@"upscaler"]){
         BOOL expected=![v[@"upscaler"] isEqual:@"taau"];
         ok=(atomic_load(&native_temporal_enabled)==expected) && ok;
@@ -166,6 +171,8 @@ static void bmf_apply_settings(void) {
         if(item.tag==4){item.enabled=input_scene_is_loaded();item.title=core_comparison_active ? @"画面对比：恢复增强设置" : @"画面对比：切回原生设置";}
         if(item.action==@selector(feature:)){
             NSDictionary *entry=item.representedObject;id selected=bmf_settings[entry[@"key"]];
+            if([entry[@"key"] isEqual:@"keyboardBindings"])item.enabled=!probe_cn_client;
+            if([entry[@"key"] isEqual:@"sceneVegetation"])item.enabled=!probe_cn_client;
             item.state=(entry[@"value"] ? [entry[@"value"] isEqual:selected] : [selected boolValue]) ? NSControlStateValueOn : NSControlStateValueOff;
         }
     }
@@ -214,6 +221,9 @@ static void core_status(NSString *identifier) {
     NSDictionary *state=@{@"id":identifier ?: @"",@"pid":@(getpid()),@"updatedAt":@(NSDate.date.timeIntervalSince1970),
         @"sceneReady":@(input_scene_is_loaded()),@"selfShadow":@(character_shadow_override_enabled),@"shadowResolution":@(core_shadow_current),
         @"comparisonBaseline":@(core_comparison_active),
+        @"frameRate":frame_rate_state(),
+        @"sceneVegetation":vegetation_state(),
+        @"keyboardBindings":game_settings_keyboard_status(find_class("Beyond","GameSetting"),nil),
         @"effective":@{@"upscaler":bmf_upscaler_mode(),@"renderScale":display_feature_parameters(@"RenderTargetSettings")[@"RenderingScale"] ?: @0,@"lod":scene_lod_selected_profile(),
             @"vegetationDensity":display_feature_parameters(@"Grass")[@"GrassGlobalSparsity"] ?: @(-1)},
         @"metalFX":native_temporal_state(),@"lighting":bmf_lighting_state(),
@@ -240,6 +250,7 @@ static void core_command(void) {
     else if([op isEqual:@"shadow"])override_volume(@"HGCharacterVolume",command,false);
     else if([op isEqual:@"shadow-resolution"])core_shadow_resolution([command[@"value"] intValue],true);
     else if([op isEqual:@"settings"])game_settings(command);
+    else if([op isEqual:@"gpu-timing"])capture_metal_timing(command);
     else if([op isEqual:@"compare"])bmf_compare();
     else if(![op isEqual:@"status"])return;
     core_status(last);
