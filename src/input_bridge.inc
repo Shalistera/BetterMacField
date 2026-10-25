@@ -43,6 +43,7 @@ typedef enum { InputAttackNone,InputAttackNormal,InputAttackThrow,InputAttackCus
 static InputAttackRoute input_attack_route;
 static uint32_t input_attack_owner_handle;
 static void input_release_buttons(void);
+static bool input_legacy_mouse_key_read(int key,int kind,bool *value);
 static bool input_watch_fit_enabled;
 static uint32_t input_watch_transform_handle;
 static float input_watch_original_scale[3];
@@ -612,7 +613,6 @@ static void input_capture(bool enabled) {
         input_mouse_monitor=[NSEvent addLocalMonitorForEventsMatchingMask:(NSEventMaskMouseMoved|NSEventMaskLeftMouseDragged|NSEventMaskRightMouseDragged|NSEventMaskOtherMouseDragged|NSEventMaskScrollWheel|NSEventMaskLeftMouseDown|NSEventMaskLeftMouseUp|NSEventMaskRightMouseDown|NSEventMaskRightMouseUp) handler:^NSEvent *(NSEvent *event){
             if(input_window_event(event))return event;
             if(input_native_overlay_visible()){input_set_captured(false);input_menu_release();input_release_buttons();return event;}
-            if(input_menu_event(event))return nil;
             if(event.type==NSEventTypeLeftMouseDown || event.type==NSEventTypeLeftMouseUp || event.type==NSEventTypeRightMouseDown || event.type==NSEventTypeRightMouseUp){
                 int button=(event.type==NSEventTypeRightMouseDown || event.type==NSEventTypeRightMouseUp) ? 1 : 0;
                 bool down=event.type==NSEventTypeLeftMouseDown || event.type==NSEventTypeRightMouseDown;
@@ -621,13 +621,15 @@ static void input_capture(bool enabled) {
                     input_button_events++;bool handled=input_trigger_button(button,down,!down && !allowed);
                     input_button_held[button]=down && handled;if(handled)return nil;
                 }
-                return event;
+                return input_menu_event(event) ? nil : event;
             }
             if(event.type==NSEventTypeScrollWheel){
-                if(input_mouse_bridge_enabled && input_mouse_bridge_to_camera && input_cursor_captured && NSApp.isActive && !(event.modifierFlags & (NSEventModifierFlagOption|NSEventModifierFlagCommand)))
+                if(input_mouse_bridge_enabled && input_mouse_bridge_to_camera && input_cursor_captured && NSApp.isActive && !(event.modifierFlags & (NSEventModifierFlagOption|NSEventModifierFlagCommand))){
                     if(input_queue_scroll(event))return nil;
-                return event;
+                }
+                return input_menu_event(event) ? nil : event;
             }
+            if(input_menu_event(event))return nil;
             input_native_mouse_x+=event.deltaX;input_native_mouse_y+=event.deltaY;input_native_mouse_events++;
             if(input_mouse_bridge_enabled && input_cursor_captured && NSApp.isActive && !(event.modifierFlags & (NSEventModifierFlagOption|NSEventModifierFlagCommand)))input_queue_mouse(event.deltaX,-event.deltaY);
             return event;
@@ -663,7 +665,7 @@ static void input_capture(bool enabled) {
             }
             input_set_captured(desired && !input_window_edge_drag);
             if(desired || !NSApp.isActive || input_native_overlay_visible())atomic_store(&input_legacy_pointer_active,false);
-            if(desired || !NSApp.isActive)input_menu_release();
+            if(!NSApp.isActive || input_native_overlay_visible())input_menu_release();
         }});
         dispatch_resume(input_capture_timer);
     }
@@ -722,6 +724,7 @@ static void dump_input(void) {
     result[@"pcUILayoutCanvases"]=@(input_ui_layout_canvases);
     result[@"squadTipCount"]=input_squad_tip_ids ? @(input_squad_tip_ids.count) : [NSNull null];
     result[@"menuMouseEnabled"]=@(input_menu_mouse_handle!=0);
+    result[@"legacyMouseButtonsReady"]=@(input_legacy_button_slots[0]!=NULL);
     result[@"menuMouseEvents"]=@(input_menu_events);
     result[@"legacyPointerReady"]=@(input_legacy_pointer_slot!=NULL);
     result[@"legacyPointerActive"]=@(atomic_load(&input_legacy_pointer_active));

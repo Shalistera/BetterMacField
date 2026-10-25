@@ -16,6 +16,8 @@ static void (*input_legacy_scroll_original)(float *);
 static uint32_t input_legacy_scroll_handle;
 static const void *input_legacy_scroll_read;
 
+#include "mouse_buttons.inc"
+
 static void input_legacy_scroll(float *delta) {
     if(input_legacy_scroll_handle && NSApp.isActive && !input_native_overlay_visible()){
         void *exception=NULL;
@@ -158,6 +160,7 @@ static void input_menu_release(void) {
 }
 
 static bool input_menu_start(bool enabled) {
+    input_legacy_buttons_start(false);
     input_legacy_scroll_start(false);
     input_legacy_pointer_start(false);
     if(input_menu_mouse_handle){
@@ -199,6 +202,7 @@ static bool input_menu_start(bool enabled) {
     input_static(find_class("UnityEngine","Cursor"),"set_lockState",1,args);
     fprintf(output,"input_legacy_pointer_ready=%d\n",input_legacy_pointer_start(true));
     fprintf(output,"input_legacy_scroll_ready=%d\n",input_legacy_scroll_start(true));
+    fprintf(output,"input_legacy_buttons_ready=%d\n",input_legacy_buttons_start(true));
     fprintf(output,"input_menu_mouse_ready=1 device=%d owned=%d\n",input_menu_device_id,input_menu_mouse_owned);
     return true;
 }
@@ -206,11 +210,14 @@ static bool input_menu_start(bool enabled) {
 static bool input_menu_event(NSEvent *event) {
     if(!input_menu_mouse_handle)return false;
     void *mode=input_static(find_class("Beyond","DeviceInfo"),"get_usingKeyboard",0,NULL);
-    // Captured gameplay owns the wheel for camera zoom. Option releases the
-    // cursor through input_capture, allowing the UI to receive wheel events.
-    if(input_cursor_captured || !NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
+    if(!NSApp.isActive || !mode || !*(bool *)object_unbox(mode) || (event.modifierFlags & NSEventModifierFlagCommand)){
         input_menu_release();return false;
     }
+    // Camera capture changes pointer ownership, not the availability of buttons
+    // to the game's bindings (zipline, dialogue and other contextual actions).
+    bool buttonEvent=event.type==NSEventTypeLeftMouseDown || event.type==NSEventTypeLeftMouseUp ||
+        event.type==NSEventTypeRightMouseDown || event.type==NSEventTypeRightMouseUp;
+    if(input_cursor_captured && !buttonEvent && event.type!=NSEventTypeScrollWheel)return false;
     NSView *view=event.window.contentView;
     if(!view || view.bounds.size.width<=0 || view.bounds.size.height<=0)return false;
     NSPoint point=[view convertPoint:event.locationInWindow fromView:nil];
@@ -222,7 +229,7 @@ static bool input_menu_event(NSEvent *event) {
     input_menu_position[1]=(view.isFlipped ? 1-y : y) * *(int *)object_unbox(height);
     atomic_store(&input_legacy_pointer_x,input_menu_position[0]);
     atomic_store(&input_legacy_pointer_y,input_menu_position[1]);
-    atomic_store(&input_legacy_pointer_active,true);
+    atomic_store(&input_legacy_pointer_active,!input_cursor_captured);
     int button=-1;bool down=false;
     switch(event.type){
         case NSEventTypeLeftMouseDown:button=0;down=true;break;

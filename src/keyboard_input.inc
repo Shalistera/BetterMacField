@@ -12,7 +12,72 @@ static const void *input_keyboard_escape_getters[3];
 static _Atomic(uintptr_t) *input_keyboard_escape_slots[3];
 static bool (*input_keyboard_escape_original[3])(int);
 
+static uint32_t input_keyboard_any_handle;
+static const void *input_keyboard_any_getter;
+static _Atomic(uintptr_t) *input_keyboard_any_slot;
+static bool (*input_keyboard_any_original)(void);
+
+static bool input_keyboard_any_read(void) {
+    bool original=input_keyboard_any_original();
+    if(original || !input_keyboard_any_handle || !NSApp.isActive || input_native_overlay_visible())return original;
+    bool mouse=false;
+    for(int key=323;key<=324;key++)if(input_legacy_mouse_key_read(key,0,&mouse) && mouse)return true;
+    void *exception=NULL;
+    void *value=runtime_invoke(input_keyboard_any_getter,gchandle_get_target(input_keyboard_any_handle),NULL,&exception);
+    return value && !exception && *(bool *)object_unbox(value);
+}
+
+static bool input_keyboard_any_start(bool enabled) {
+    if(input_keyboard_any_slot){
+        uintptr_t expected=(uintptr_t)input_keyboard_any_read;
+        atomic_compare_exchange_strong(input_keyboard_any_slot,&expected,(uintptr_t)input_keyboard_any_original);
+        input_keyboard_any_slot=NULL;
+    }
+    if(input_keyboard_any_handle){gchandle_free(input_keyboard_any_handle);input_keyboard_any_handle=0;}
+    if(!enabled)return true;
+    NSBundle *bundle=NSBundle.mainBundle;
+    bool cn=[bundle.bundleIdentifier isEqual:@"com.hypergryph.endfield"];
+    if((!cn && ![bundle.bundleIdentifier isEqual:@"com.gryphline.endfield.ios"]) ||
+       ![[bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] isEqual:@"1.6.3"])return true;
+    void *klass=find_class("UnityEngine","Input");
+    const void *method=klass ? class_get_method_from_name(klass,"get_anyKey",0) : NULL;
+    const uint32_t *code=method ? *(const uint32_t **)method : NULL;
+    // AnyKeyboardKey checks this legacy held-state gate before its InputSystem scan.
+    const uint32_t expected[]={0xa9be4ff4,0xa9017bfd,0x910043fd,0xb0037e13,
+        0xf942aa60,0xb50000a0,0xd0026300,0x913f1800,0x9427cc80,0xf902aa60,
+        0xa9417bfd,0xa8c24ff4,0xd61f0000};
+    const uint32_t expected_cn[]={0xa9be4ff4,0xa9017bfd,0x910043fd,0xb003a0f3,
+        0xf9454a60,0xb50000a0,0x90028100,0x91345800,0x9427d0df,0xf9054a60,
+        0xa9417bfd,0xa8c24ff4,0xd61f0000};
+    Dl_info image={0};
+    if(!code || memcmp(code,cn ? expected_cn : expected,sizeof expected) || !dladdr(code,&image) ||
+       (uintptr_t)code-(uintptr_t)image.dli_fbase!=(cn ? 0x10728b7c : 0x10728b8c))return false;
+    int64_t pages=((code[3]>>29)&3)|(((code[3]>>5)&0x7ffff)<<2);
+    if(pages&(1<<20))pages-=1<<21;
+    uintptr_t slot=(((uintptr_t)(code+3))&~(uintptr_t)4095)+pages*4096+((code[4]>>10)&4095)*8;
+    if(slot-(uintptr_t)image.dli_fbase!=(cn ? 0x17b45a90 : 0x176e9550))return false;
+    bool ok=false;void *keyboard=input_keyboard_handle ? gchandle_get_target(input_keyboard_handle) : NULL;
+    void *control=keyboard ? invoke(keyboard,"get_anyKey",0,NULL,&ok) : NULL;
+    if(!ok || !control)return false;
+    input_keyboard_any_getter=class_get_method_from_name(object_get_class(control),"get_isPressed",0);
+    if(!input_keyboard_any_getter)return false;
+    void *(*resolve)(const char *)=dlsym(RTLD_DEFAULT,"il2cpp_resolve_icall");
+    void *native=resolve ? resolve("UnityEngine.Input::get_anyKey()") : NULL;
+    if(!native)return false;
+    input_static(klass,"get_anyKey",0,NULL);
+    _Atomic(uintptr_t) *cache=(_Atomic(uintptr_t) *)slot;uintptr_t original=(uintptr_t)native;
+    input_keyboard_any_original=native;
+    input_keyboard_any_handle=gchandle_new(control,false);
+    if(!atomic_compare_exchange_strong(cache,&original,(uintptr_t)input_keyboard_any_read)){
+        gchandle_free(input_keyboard_any_handle);input_keyboard_any_handle=0;return false;
+    }
+    input_keyboard_any_slot=cache;
+    fprintf(output,"input_keyboard_any=shared_state\n");return true;
+}
+
 static bool input_keyboard_escape_read(int key,int kind) {
+    bool mouse=false;
+    if(input_legacy_mouse_key_read(key,kind,&mouse))return mouse;
     if(key==27 && input_keyboard_escape_handle && NSApp.isActive && !input_native_overlay_visible()){
         void *exception=NULL;
         void *value=runtime_invoke(input_keyboard_escape_getters[kind],gchandle_get_target(input_keyboard_escape_handle),NULL,&exception);
@@ -25,6 +90,7 @@ static bool input_keyboard_escape_up(int key){return input_keyboard_escape_read(
 static bool input_keyboard_escape_down(int key){return input_keyboard_escape_read(key,2);}
 
 static bool input_keyboard_escape_start(bool enabled) {
+    input_keyboard_any_start(false);
     const uintptr_t hooks[]={(uintptr_t)input_keyboard_escape_held,(uintptr_t)input_keyboard_escape_up,(uintptr_t)input_keyboard_escape_down};
     for(int i=0;i<3;i++)if(input_keyboard_escape_slots[i]){
         uintptr_t expected=hooks[i];
@@ -74,6 +140,7 @@ static bool input_keyboard_escape_start(bool enabled) {
         if(!atomic_compare_exchange_strong(cache,&original,hooks[i])){input_keyboard_escape_start(false);return false;}
         input_keyboard_escape_slots[i]=cache;
     }
+    if(!input_keyboard_any_start(true)){input_keyboard_escape_start(false);return false;}
     fprintf(output,"input_keyboard_escape=shared_state\n");return true;
 }
 
