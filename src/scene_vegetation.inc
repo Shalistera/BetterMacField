@@ -257,7 +257,7 @@ static void vegetation_prepare(void) {
     if(!vegetation_requested){vegetation_startup_pending=false;return;}
     NSData *data=[NSData dataWithContentsOfFile:runtime_path(@"Vegetation/manifest.json")];
     NSDictionary *manifest=data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-    if(![manifest[@"bundleID"] isEqual:NSBundle.mainBundle.bundleIdentifier] ||
+    if(![manifest[@"bundleIDs"] containsObject:NSBundle.mainBundle.bundleIdentifier] ||
        ![manifest[@"version"] isEqual:[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"]]){
         vegetation_result=@"当前客户端的植被包尚未适配";vegetation_startup_pending=false;return;
     }

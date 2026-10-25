@@ -73,7 +73,7 @@ static NSString *game_settings_keyboard_control(void *settings,bool enabled) {
     if(!enabled)return game_settings_keyboard_restore(settings) ? @"disabled" : @"restore_failed";
     if(game_settings_keyboard_saved)return @"already_enabled";
     NSBundle *bundle=NSBundle.mainBundle;
-    if(![bundle.bundleIdentifier isEqual:@"com.gryphline.endfield.ios"] ||
+    if(![@[@"com.gryphline.endfield.ios",@"com.hypergryph.endfield"] containsObject:bundle.bundleIdentifier] ||
        ![[bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] isEqual:@"1.6.3"])
         return @"unsupported_build";
     void *tab=game_settings_keyboard_tab();

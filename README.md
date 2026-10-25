@@ -15,7 +15,7 @@ BetterMacField adds keyboard/mouse integration and graphics controls to the iOS 
 | Graphics | 720p–2160p output; MetalFX Spatial by default, optional Temporal, and native TAAU last in the menu; 66.7% / 58.8% / 50% rendering scale; sharpening; mobile / PC medium / PC high scene LOD; vegetation density at game default / 50% / 70% / 100% |
 | Lighting | Character self-shadows, character lighting and shadow filtering, shadow resolution, original GTAO, contact shadows, SSR and experimental PC character specular lighting |
 | Input | Keyboard/mouse integration, sprint and combo input handling, tool wheel, camera zoom, interaction selection, optional 15 FPS background limit and Metal HUD (off by default) |
-| Experimental | Custom keyboard bindings, 120 FPS override, missing scene vegetation restoration; keyboard bindings and vegetation currently support global iOS 1.6.3. PC character models and EFMI MOD remain placeholders. |
+| Experimental | Custom keyboard bindings, 120 FPS override, missing scene vegetation restoration; CN and global iOS 1.6.3 are supported. PC character models and EFMI MOD remain placeholders. |
 | Status & recovery | Client/component verification, runtime status, log copying and restoration of the PlayCover settings changed by this tool |
 
 **⌘G** switches between native and enhanced graphics. By default, the native comparison also selects **TAAU at 50% rendering scale and mobile LOD**; either option can be disabled. Press again to restore the captured enhanced settings. Output resolution stays unchanged, and comparison mode does not overwrite saved preferences.
@@ -94,7 +94,7 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 | 画面 | 720p–2160p；默认 MetalFX Spatial、可选 Temporal、菜单末位保留原版 TAAU；66.7% / 58.8% / 50% 渲染比例；锐化；手机 / PC 中档 / PC 高档场景 LOD；植被密度：游戏默认 / 50% / 70% / 100% |
 | 光影 | 角色自阴影、角色光照与阴影滤波、阴影精度、原版 GTAO、接触阴影、SSR、实验性角色 PC 高光 |
 | 操作 | 键鼠接入、冲刺与连续技输入处理、工具转盘、镜头缩放、交互项选择、可关闭的后台 15 FPS 限制、Metal HUD（默认关闭） |
-| 实验性功能 | 修改键盘快捷键、120 帧解锁、缺失场景植被恢复；按键页面和场景植被目前适配国际服 iOS 1.6.3。角色高模和 EFMIMOD 保留占位入口。 |
+| 实验性功能 | 修改键盘快捷键、120 帧解锁、缺失场景植被恢复；适配国服与国际服 iOS 1.6.3。角色高模和 EFMIMOD 保留占位入口。 |
 | 状态与恢复 | 客户端及组件校验、运行状态、复制日志、恢复本工具修改的 PlayCover 设置 |
 
 **⌘G** 切换原生／增强画面。默认同时回退为 **TAAU＋50% 渲染和手机 LOD**，这两项可以分别取消；再按一次恢复先前的增强设置。输出分辨率保持不变，对比状态不会覆盖保存的偏好。
@@ -103,7 +103,7 @@ BetterMacField 为通过 **PlayCover** 运行的《**明日方舟：终末地**�
 
 植被密度默认 **100%**，通过游戏原生参数调整当前场景已有草丛、芦苇等植被，使用已安装的移动端资源。启动器和游戏内菜单均可切换档位；选择「游戏默认」会恢复原有密度。
 
-缺失场景植被恢复默认关闭，开关下次启动生效。模型、材质和贴图复用 iOS，场景摆放记录来自 PC；国服对应包仍待准备。数据依赖与验证情况另见[场景植被恢复与 iOS 资源复用](docs/ios-resource-reuse.md)。
+缺失场景植被恢复默认关闭，开关下次启动生效。模型、材质和贴图复用 iOS，场景摆放记录来自 PC，国服与国际服共用该场景包。数据依赖与验证情况另见[场景植被恢复与 iOS 资源复用](docs/ios-resource-reuse.md)。
 
 实验性 **120 FPS** 同时调整 Unity 目标帧率和显示刷新请求，解除原来的 60 FPS 上限。「游戏默认」恢复接管前的游戏帧率；后台节能继续请求 15 FPS。实际帧率受屏幕和场景负载影响，国际服 iOS 1.6.3 已验证渲染帧率超过 60 FPS。详见[验证记录](docs/validation.md)。
 

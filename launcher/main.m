@@ -190,8 +190,6 @@ static NSTextField *label(NSString *text,CGFloat size,BOOL bold) {
     self.lastError=nil;
     [NSUserDefaults.standardUserDefaults setObject:self.region forKey:@"SelectedRegion"];
     [self showSettings:loadSettings(self.region)];self.dirty=NO;self.lastSettingsFingerprint=nil;[self refresh:nil];
-    self.controls[@"keyboardBindings"].enabled=[self.region isEqual:@"global"];
-    self.controls[@"sceneVegetation"].enabled=[self.region isEqual:@"global"];
 }
 - (void)error:(NSString *)message {
     self.lastError=message;

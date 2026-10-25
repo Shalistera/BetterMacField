@@ -171,8 +171,6 @@ static void bmf_apply_settings(void) {
         if(item.tag==4){item.enabled=input_scene_is_loaded();item.title=core_comparison_active ? @"画面对比：恢复增强设置" : @"画面对比：切回原生设置";}
         if(item.action==@selector(feature:)){
             NSDictionary *entry=item.representedObject;id selected=bmf_settings[entry[@"key"]];
-            if([entry[@"key"] isEqual:@"keyboardBindings"])item.enabled=!probe_cn_client;
-            if([entry[@"key"] isEqual:@"sceneVegetation"])item.enabled=!probe_cn_client;
             item.state=(entry[@"value"] ? [entry[@"value"] isEqual:selected] : [selected boolValue]) ? NSControlStateValueOn : NSControlStateValueOff;
         }
     }

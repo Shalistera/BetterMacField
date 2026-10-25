@@ -81,7 +81,7 @@ def prepare(export, output, workers):
     output.mkdir(parents=True, exist_ok=True)
     with ProcessPoolExecutor(max_workers=workers) as pool:
         routes = list(pool.map(build_chunk, tasks))
-    report = dict(bundleID='com.gryphline.endfield.ios', version='1.6.3',
+    report = dict(bundleIDs=['com.gryphline.endfield.ios', 'com.hypergryph.endfield'], version='1.6.3',
         instances=classification['summary']['nativeAssetsInstances'],
         pcModels=False, pcTextures=False, pcSceneRecords=True, bundles=routes)
     (output/'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
