@@ -7,18 +7,15 @@ Arknights: Endfield game content and trademarks belong to their respective
 rights holders. PlayCover/PlayTools and Apple's Metal/MetalFX remain separate
 components with their own terms. They are not bundled in this repository.
 
-The local full-feature launcher package also contains rendering programs
-prepared from a verified local game export: original GTAO/contact compute
-programs and adapted lighting/character shader programs. These are build
-inputs kept outside the tracked MIT source tree (build/Graphics), and are
-not relicensed under MIT. No models, textures, Unity resource bundles, IPA
-files, or MOD payloads are included in this launcher package. The current
-packaging helper consumes a prepared local export; it is not yet a standalone
-extractor for arbitrary player installations.
+The full-feature launcher package contains rendering programs prepared from
+a verified global iOS 1.7.2 game export: adapted character/scene lighting
+programs, original GTAO/contact kernels, and motion/depth binding metadata.
+These inputs stay outside the tracked MIT tree under build/Graphics172 and
+are not relicensed under MIT. The preparation helper consumes a prepared
+local export; it is not an extractor for arbitrary player installations.
 
-The optional native-assets vegetation package contains prepared scene chunks:
-original iOS scene records plus selected PC-authored instance definitions,
-placements and streaming ownership. Models, materials and textures are resolved
-from the installed iOS client. These game-derived scene records are local build
-inputs under build/Vegetation, excluded from the source repository and the MIT
-license. prepare_vegetation.py and tools/scene_vegetation.py are build-tool source.
+No models, textures, game scene chunks, Unity asset bundles, IPA files or MOD
+payloads are included in this launcher package. The macOS executable bundle
+named BetterMacFieldGraphics.bundle contains project integration code and
+the prepared rendering programs described above. The application icon is
+included with the project source.

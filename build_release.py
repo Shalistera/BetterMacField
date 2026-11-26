@@ -8,44 +8,77 @@ import shutil
 import subprocess
 import zipfile
 import bettermacfield as bmf
+import prepare_graphics172
+
+
+VERSION = '0.5.0'
+BUILD_NUMBER = '10'
+
+
+def build_current(resources, include_assets=True):
+    source = bmf.BUILD/'Graphics172'
+    inputs = prepare_graphics172.inventory(source) if include_assets else {}
+    bundle = resources/'BetterMacFieldGraphics.bundle'
+    if bundle.exists():
+        shutil.rmtree(bundle)
+    contents = bundle/'Contents'
+    binary = contents/'MacOS/BetterMacFieldGraphics'
+    binary.parent.mkdir(parents=True)
+    assets = contents/'Resources'
+    assets.mkdir(parents=True)
+    for name in inputs:
+        destination = assets/name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source/name, destination)
+    shutil.copy2(bmf.ROOT/'launcher/features.json', assets/'features.json')
+    subprocess.run(['xcrun', 'clang', '-bundle', '-fobjc-arc', '-arch', 'arm64',
+        '-mmacosx-version-min=13.0', '-framework', 'AppKit', '-framework', 'Foundation',
+        '-framework', 'Accelerate', '-framework', 'Metal', '-weak_framework', 'MetalFX',
+        str(bmf.ROOT/'src/v172/graphics172.m'), '-o', str(binary)], check=True)
+    (contents/'Info.plist').write_bytes(plistlib.dumps(dict(
+        CFBundleIdentifier='io.shalistera.BetterMacField.Graphics',
+        CFBundleExecutable=binary.name, CFBundlePackageType='BNDL',
+        CFBundleVersion=BUILD_NUMBER, NSPrincipalClass='BMFGraphics172')))
+    subprocess.run(['codesign', '--force', '--sign', '-', str(bundle)], check=True)
+    entry = resources/'BetterMacField172.dylib'
+    subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc',
+        '-target', 'arm64-apple-ios16.0-macabi', '-framework', 'Foundation',
+        '-Wl,-install_name,@rpath/BetterMacField172.dylib',
+        str(bmf.ROOT/'src/v172/entry172.m'), '-o', str(entry)], check=True)
+    subprocess.run(['codesign', '--force', '--sign', '-', str(entry)], check=True)
+    return bundle, entry
 
 
 def main():
-    bmf.build()
+    # Validate all external inputs before replacing the current release bundle.
+    prepare_graphics172.inventory(bmf.BUILD/'Graphics172')
     target = bmf.ROOT/'dist/BetterMacField.app'
+    # Rebuild the generated package so retired runtime assets cannot survive.
+    if target.exists():
+        shutil.rmtree(target)
     contents = target/'Contents'
     resources = contents/'Resources'
     executables = contents/'MacOS'
     resources.mkdir(parents=True, exist_ok=True)
     executables.mkdir(parents=True, exist_ok=True)
-    # Keep one current package and build in place; no versioned backup copies.
-    library = resources/'libBetterMacField.dylib'
-    shutil.copy2(bmf.LIBRARY, library)
-    graphics = bmf.BUILD/'Graphics'
-    if not (graphics/'endfield-ios-ao-patches.json').is_file():
-        raise RuntimeError('Prepare the verified local graphics export with prepare_graphics.py first.')
-    if (resources/'Graphics').exists():
-        shutil.rmtree(resources/'Graphics')
-    shutil.copytree(graphics, resources/'Graphics')
-    vegetation = bmf.BUILD/'Vegetation'
-    manifest = json.loads((vegetation/'manifest.json').read_text())
-    if not manifest.get('bundles') or manifest.get('pcModels') or manifest.get('pcTextures'):
-        raise RuntimeError('Prepare the native-assets vegetation export with prepare_vegetation.py first.')
-    if (resources/'Vegetation').exists():
-        shutil.rmtree(resources/'Vegetation')
-    shutil.copytree(vegetation, resources/'Vegetation')
+    bundle, entry = build_current(resources)
     shutil.copy2(bmf.ROOT/'launcher/features.json', resources/'features.json')
     shutil.copy2(bmf.ROOT/'launcher/AppIcon.icns', resources/'AppIcon.icns')
-    payload = {str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Graphics').rglob('*') if p.is_file()}
-    payload.update({str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (resources/'Vegetation').rglob('*') if p.is_file()})
-    payload['features.json'] = hashlib.sha256((resources/'features.json').read_bytes()).hexdigest()
-    profiles = {region: dict(bundleID=bundle, version='1.6.3')
+    payload = {'features.json': hashlib.sha256((resources/'features.json').read_bytes()).hexdigest()}
+    payload.update({str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in bundle.rglob('*') if p.is_file()})
+    payload[entry.name] = hashlib.sha256(entry.read_bytes()).hexdigest()
+    profiles = {region: dict(bundleID=bundle, version='1.7.2')
                 for region, bundle in bmf.CLIENTS.items()}
+    current = dict(version='1.7.2', build='0',
+        unityUUID='0f92770a-6938-397f-a0f2-272e994ba286',
+        metadataSHA256='3de06a6ee4f48cd920f2dd617f6a7ebb4755ba5308d9ad592b328a06c52def44',
+        entry=entry.name, graphics=bundle.name)
     (resources/'clients.json').write_text(json.dumps(dict(clients=profiles, displaySettings=bmf.DISPLAY_SETTINGS,
-        runtimeSHA256=hashlib.sha256(library.read_bytes()).hexdigest(), payload=payload), indent=2)+'\n')
+        current172=current, payload=payload), indent=2)+'\n')
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='io.shalistera.BetterMacField',
         CFBundleName='BetterMacField', CFBundleDisplayName='BetterMacField', CFBundleExecutable='BetterMacField',
-        CFBundlePackageType='APPL', CFBundleShortVersionString='0.4.0', CFBundleVersion='9', CFBundleIconFile='AppIcon',
+        CFBundlePackageType='APPL', CFBundleShortVersionString=VERSION, CFBundleVersion=BUILD_NUMBER, CFBundleIconFile='AppIcon',
         LSMinimumSystemVersion='13.0', NSHighResolutionCapable=True)))
     subprocess.run(['xcrun', 'clang', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=13.0',
         '-Wno-deprecated-declarations', '-framework', 'AppKit', '-framework', 'Foundation',
