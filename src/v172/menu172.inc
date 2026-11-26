@@ -26,10 +26,18 @@ static void showMenu172Hint(void) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC),dispatch_get_main_queue(),^{[hint removeFromSuperview];});
 }
 
-static NSArray *menu172Fields(void) {
-    NSData *data = [NSData dataWithContentsOfFile:graphicsResource172(@"features.json")];
-    NSDictionary *catalog = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
-    return catalog[@"fields"] ?: @[];
+static NSDictionary *menu172Catalog(void) {
+    static NSDictionary *catalog;
+    if (!catalog) {
+        NSData *data = [NSData dataWithContentsOfFile:graphicsResource172(@"features.json")];
+        catalog = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+    }
+    return catalog;
+}
+static NSDictionary *menu172Field(NSString *key) {
+    for (NSDictionary *field in menu172Catalog()[@"fields"])
+        if ([field[@"key"] isEqual:key]) return field;
+    return nil;
 }
 
 @interface BMFMenu172 : NSObject <NSMenuDelegate>
@@ -37,6 +45,8 @@ static NSArray *menu172Fields(void) {
 @property(nonatomic, strong) NSMenuItem *status;
 @property(nonatomic, strong) NSMenuItem *compare;
 @property(nonatomic, strong) NSDictionary<NSString *, NSMenuItem *> *groups;
+@property(nonatomic, strong) NSMenuItem *preset;
+@property(nonatomic, strong) NSMenu *menu;
 @property(nonatomic, strong) id shortcuts;
 @property(nonatomic, copy) NSDictionary *selected;
 @property(nonatomic, copy) NSDictionary *runtime;
@@ -58,42 +68,8 @@ static NSArray *menu172Fields(void) {
     _compare = [menu addItemWithTitle:@"临时查看原画面" action:@selector(toggleComparison:) keyEquivalent:@"g"];
     _compare.keyEquivalentModifierMask = NSEventModifierFlagCommand;
     _compare.target = self;
-    [menu addItem:NSMenuItem.separatorItem];
-
-    NSDictionary *titles = @{@"gtao":@"GTAO 环境遮蔽", @"contact":@"接触阴影", @"ssr":@"屏幕空间反射",
-                             @"shadowResolution":@"阴影精度", @"lod":@"场景 LOD", @"vegetationDensity":@"草地密度",
-                             @"sharpen":@"锐化", @"backgroundLimit":@"后台节能", @"upscaler":@"超分模式",
-                             @"selfShadow":@"角色自阴影", @"keyboard":@"自动键鼠模式",
-                             @"quality":@"超分质量",
-                             @"characterLighting":@"角色面光与阴影滤波",
-                             @"characterSpecular":@"角色 PC 高光", @"height":@"输出分辨率",
-                             @"compareLOD":@"对比时恢复手机 LOD", @"compareRendering":@"对比时切换 TAAU · 目标 50%"};
-    NSMutableDictionary *groups = [NSMutableDictionary dictionary];
-    for (NSDictionary *field in menu172Fields()) {
-        NSString *key = field[@"key"], *title = titles[key];
-        if (!title || !liveChoices()[key]) continue;
-        NSMenuItem *group = [menu addItemWithTitle:title action:NULL keyEquivalent:@""];
-        NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
-        submenu.autoenablesItems = NO;
-        group.submenu = submenu;
-        group.representedObject = title;
-        groups[key] = group;
-        NSString *onTitle = [key isEqual:@"backgroundLimit"] ? @"开启 · 后台 15 FPS" : @"开启";
-        NSArray *choices = field[@"choices"] ?: @[@{@"title":onTitle, @"value":@YES},
-                                                 @{@"title":@"关闭", @"value":@NO}];
-        for (NSDictionary *choice in choices) {
-            NSMenuItem *item = [submenu addItemWithTitle:choice[@"title"] action:@selector(choose:) keyEquivalent:@""];
-            item.target = self;
-            item.representedObject = @[key, choice[@"value"]];
-        }
-        [submenu addItem:NSMenuItem.separatorItem];
-        [submenu addItemWithTitle:@"等待游戏读回" action:NULL keyEquivalent:@""].enabled = NO;
-    }
-    _groups = [groups copy];
-    [menu addItem:NSMenuItem.separatorItem];
-    NSMenuItem *popup = [menu addItemWithTitle:@"在游戏窗口呼出菜单" action:@selector(popup:) keyEquivalent:@"p"];
-    popup.target = self;
-    popup.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagOption;
+    _menu = menu;
+    _groups = @{};
     __weak BMFMenu172 *weakSelf = self;
     _shortcuts = [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown handler:^NSEvent *(NSEvent *event) {
         NSEventModifierFlags modifiers = event.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagOption |
@@ -112,8 +88,96 @@ static NSArray *menu172Fields(void) {
     return self;
 }
 
+- (NSMenuItem *)header:(NSString *)title in:(NSMenu *)menu {
+    NSMenuItem *item;
+    if (@available(macOS 14.0, *)) item = [NSMenuItem sectionHeaderWithTitle:title];
+    else { item = [[NSMenuItem alloc] initWithTitle:title action:NULL keyEquivalent:@""]; item.enabled = NO; }
+    [menu addItem:item];
+    return item;
+}
+
+// One entry per live setting: a checkable item for switches, a submenu of choices otherwise. Readbacks go into the
+// tooltip (switches) or the last line of the submenu (choices).
+- (void)addField:(NSString *)key to:(NSMenu *)menu into:(NSMutableDictionary *)groups {
+    NSDictionary *field = menu172Field(key);
+    if (!field || !liveChoices()[key] || !self.selected[key]) return;
+    NSString *title = [field[@"restart"] boolValue] ? [field[@"title"] stringByAppendingString:@" · 下次启动"] : field[@"title"];
+    NSMenuItem *group;
+    if (field[@"choices"]) {
+        group = [menu addItemWithTitle:title action:NULL keyEquivalent:@""];
+        NSMenu *submenu = [[NSMenu alloc] initWithTitle:title];
+        submenu.autoenablesItems = NO;
+        group.submenu = submenu;
+        for (NSDictionary *choice in field[@"choices"]) {
+            NSMenuItem *item = [submenu addItemWithTitle:choice[@"title"] action:@selector(choose:) keyEquivalent:@""];
+            item.target = self;
+            item.representedObject = @[key, choice[@"value"]];
+        }
+        [submenu addItem:NSMenuItem.separatorItem];
+        [submenu addItemWithTitle:@"等待游戏读回" action:NULL keyEquivalent:@""].enabled = NO;
+    } else {
+        group = [menu addItemWithTitle:title action:@selector(toggleField:) keyEquivalent:@""];
+        group.target = self;
+    }
+    group.representedObject = @{@"key":key, @"title":title};
+    groups[key] = group;
+}
+
+// Pages and sections follow features.json "ui172", the same layout as the launcher window.
+- (void)rebuild {
+    NSMenu *menu = self.menu;
+    while (menu.numberOfItems > 2) [menu removeItemAtIndex:2];
+    NSMutableDictionary *groups = [NSMutableDictionary dictionary];
+    NSDictionary *ui = menu172Catalog()[@"ui172"];
+    self.preset = nil;
+    for (NSDictionary *page in ui[@"pages"]) {
+        BOOL advanced = [page[@"title"] isEqual:@"高级"];
+        NSMenu *target = menu;
+        [menu addItem:NSMenuItem.separatorItem];
+        if (advanced) {
+            NSMenuItem *more = [menu addItemWithTitle:@"高级" action:NULL keyEquivalent:@""];
+            target = [[NSMenu alloc] initWithTitle:@"高级"]; target.autoenablesItems = NO; more.submenu = target;
+        } else [self header:page[@"title"] in:menu];
+        if ([page[@"title"] isEqual:@"画质"] && [ui[@"presets"] count]) {
+            self.preset = [menu addItemWithTitle:@"画质预设" action:NULL keyEquivalent:@""];
+            NSMenu *presets = [[NSMenu alloc] initWithTitle:@"画质预设"]; presets.autoenablesItems = NO;
+            for (NSDictionary *preset in ui[@"presets"]) {
+                NSMenuItem *item = [presets addItemWithTitle:preset[@"title"] action:@selector(choosePreset:) keyEquivalent:@""];
+                item.target = self; item.representedObject = preset[@"values"];
+            }
+            self.preset.submenu = presets;
+        }
+        for (NSDictionary *section in page[@"sections"]) {
+            if ([section[@"maintenance"] boolValue] || ![section[@"keys"] count]) continue;
+            NSMenu *sectionMenu = target;
+            if (section[@"menu"]) {
+                NSMenuItem *more = [target addItemWithTitle:section[@"menu"] action:NULL keyEquivalent:@""];
+                sectionMenu = [[NSMenu alloc] initWithTitle:section[@"menu"]]; sectionMenu.autoenablesItems = NO; more.submenu = sectionMenu;
+            } else if (advanced && [section[@"title"] length]) {
+                if (target.numberOfItems) [target addItem:NSMenuItem.separatorItem];
+                [self header:section[@"title"] in:target];
+            }
+            for (NSString *key in section[@"keys"]) [self addField:key to:sectionMenu into:groups];
+        }
+    }
+    _groups = [groups copy];
+    [menu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *popup = [menu addItemWithTitle:@"在游戏窗口呼出菜单" action:@selector(popup:) keyEquivalent:@"p"];
+    popup.target = self;
+    popup.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagOption;
+}
+
 - (void)choose:(NSMenuItem *)item {
     if (!self.comparing && self.perform) self.perform(item.representedObject[0], item.representedObject[1]);
+}
+
+- (void)toggleField:(NSMenuItem *)item {
+    NSString *key = item.representedObject[@"key"];
+    if (!self.comparing && self.perform) self.perform(key, @(![self.selected[key] boolValue]));
+}
+
+- (void)choosePreset:(NSMenuItem *)item {
+    if (!self.comparing && self.perform) self.perform(@"settings", item.representedObject);
 }
 
 - (void)toggleComparison:(id)sender {
@@ -194,11 +258,18 @@ static NSArray *menu172Fields(void) {
 
 - (void)menuWillOpen:(NSMenu *)menu {
     self.status.title = self.runtime[@"error"] ?: self.runtime[@"waiting"] ?: self.runtime[@"settingsResult"] ?:
-        (self.comparing ? @"临时原画面 · 已保留画质设置" : @"所选画面 · 选择后保存");
-    self.compare.title = self.comparing ? @"返回已选所选画面" : @"临时查看原画面";
+        (self.comparing ? @"正在看原画面 · 你的设置都还在" : @"改动立即生效并保存");
+    self.compare.title = self.comparing ? @"返回增强画面" : @"临时查看原画面";
     self.compare.state = self.comparing ? NSControlStateValueOn : NSControlStateValueOff;
     for (NSString *key in self.groups) {
         NSMenuItem *group = self.groups[key];
+        NSString *title = group.representedObject[@"title"];
+        if (!group.submenu) {
+            group.state = [self.selected[key] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+            group.enabled = !self.comparing;
+            group.toolTip = [self readback:key];
+            continue;
+        }
         NSString *choice = nil;
         for (NSMenuItem *item in group.submenu.itemArray) {
             if (!item.representedObject) continue;
@@ -207,17 +278,30 @@ static NSArray *menu172Fields(void) {
             item.enabled = !self.comparing;
             if (selected) choice = item.title;
         }
-        group.title = choice ? [NSString stringWithFormat:@"%@ · %@", group.representedObject, choice] : group.representedObject;
+        group.title = choice ? [NSString stringWithFormat:@"%@　%@", title, choice] : title;
         group.submenu.itemArray.lastObject.title = [self readback:key];
     }
+    NSString *presetName = nil;
+    for (NSMenuItem *item in self.preset.submenu.itemArray) {
+        BOOL match = YES;
+        NSDictionary *values = item.representedObject;
+        for (NSString *key in values) if (![self.selected[key] isEqual:values[key]]) match = NO;
+        item.state = match ? NSControlStateValueOn : NSControlStateValueOff;
+        item.enabled = !self.comparing;
+        if (match) presetName = item.title;
+    }
+    self.preset.title = [NSString stringWithFormat:@"画质预设　%@", presetName ?: @"自定义"];
 }
 @end
 
 // The graphics component supplies current readbacks and owns all persistence and comparisons.
 static BOOL updateMenu172(NSDictionary *selected, NSDictionary *state, BOOL comparing, void (^perform)(NSString *, id)) {
     static BMFMenu172 *controller;
+    static NSSet *builtKeys;
     if (!controller) controller = [BMFMenu172 new];
     controller.selected = selected;
+    NSSet *keys = [NSSet setWithArray:selected.allKeys];
+    if (![keys isEqual:builtKeys]) { [controller rebuild]; builtKeys = keys; }
     controller.runtime = state;
     controller.comparing = comparing;
     controller.perform = perform;

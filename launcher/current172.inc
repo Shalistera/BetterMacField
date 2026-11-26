@@ -1,78 +1,34 @@
 // The current client uses PlayTools' Catalyst entry and a separate macOS bundle.
 // All deployment and activation state belongs to the public launcher.
-#include <mach-o/loader.h>
-#include <mach-o/fat.h>
-#include <libkern/OSByteOrder.h>
 #include <sys/clonefile.h>
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <fcntl.h>
 #include <unistd.h>
 
-static NSString *uuid172(NSString *path) {
-    NSData *data=[NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
-    if(data.length<sizeof(struct mach_header_64))return nil;
-    const uint8_t *bytes=data.bytes;uint64_t offset=0,size=data.length;
-    uint32_t magic;memcpy(&magic,bytes,sizeof magic);
-    if(magic==FAT_CIGAM || magic==FAT_CIGAM_64){
-        const struct fat_header *fat=(const void *)bytes;
-        uint32_t count=OSSwapBigToHostInt32(fat->nfat_arch);
-        size_t entrySize=magic==FAT_CIGAM_64 ? sizeof(struct fat_arch_64) : sizeof(struct fat_arch);
-        if(count>64 || sizeof(*fat)+(uint64_t)count*entrySize>data.length)return nil;
-        BOOL found=NO;
-        for(uint32_t i=0;i<count;i++){
-            const struct fat_arch *arch=(const void *)(bytes+sizeof(*fat)+i*entrySize);
-            if(OSSwapBigToHostInt32(arch->cputype)!=CPU_TYPE_ARM64)continue;
-            if(magic==FAT_CIGAM_64){const struct fat_arch_64 *a=(const void *)arch;offset=OSSwapBigToHostInt64(a->offset);size=OSSwapBigToHostInt64(a->size);}
-            else{offset=OSSwapBigToHostInt32(arch->offset);size=OSSwapBigToHostInt32(arch->size);}
-            found=YES;break;
-        }
-        if(!found)return nil;
-    }
-    if(offset>data.length || size>data.length-offset || size<sizeof(struct mach_header_64))return nil;
-    const struct mach_header_64 *header=(const void *)(bytes+offset);
-    if(header->magic!=MH_MAGIC_64 || header->cputype!=CPU_TYPE_ARM64 || header->sizeofcmds>size-sizeof(*header))return nil;
-    size_t cursor=sizeof(*header),end=cursor+header->sizeofcmds;
-    for(uint32_t i=0;i<header->ncmds;i++){
-        if(cursor>end || end-cursor<sizeof(struct load_command))return nil;
-        const struct load_command *cmd=(const void *)(bytes+offset+cursor);
-        if(cmd->cmdsize<sizeof(*cmd) || cmd->cmdsize>end-cursor)return nil;
-        if(cmd->cmd==LC_UUID && cmd->cmdsize==sizeof(struct uuid_command)){
-            const struct uuid_command *uuid=(const void *)cmd;
-            return [[NSUUID alloc] initWithUUIDBytes:uuid->uuid].UUIDString.lowercaseString;
-        }
-        cursor+=cmd->cmdsize;
-    }
-    return nil;
-}
 static void validate172(NSString *appPath) {
-    NSDictionary *profile=packageInfo()[@"current172"];
+    NSDictionary *profile=packageInfo()[@"clients"][selectedRegion172];
     NSDictionary *info=[NSDictionary dictionaryWithContentsOfFile:[appPath stringByAppendingPathComponent:@"Info.plist"]];
-    NSString *uuid=uuid172([appPath stringByAppendingPathComponent:@"Frameworks/UnityFramework.framework/UnityFramework"]);
-    NSString *metadata=sha256([appPath stringByAppendingPathComponent:@"Data/Managed/Metadata/global-metadata.dat"]);
-    if(![profile[@"version"] isEqual:@"1.7.2"] || ![info[@"CFBundleShortVersionString"] isEqual:@"1.7.2"] || ![info[@"CFBundleIdentifier"] isEqual:@"com.gryphline.endfield.ios"] ||
-       ![info[@"CFBundleVersion"] isEqual:profile[@"build"]] || ![info[@"CFBundleExecutable"] isEqual:@"Endfield"] ||
-       ![uuid isEqual:[profile[@"unityUUID"] lowercaseString]] || ![metadata isEqual:profile[@"metadataSHA256"]])
-        fail(@"国际服 1.7.2 的游戏代码与当前适配版本不匹配。请使用下载页列出的游戏版本；请重新安装对应版本后再启动。");
-    if(![profile[@"entry"] isEqual:@"BetterMacField172.dylib"] || ![profile[@"graphics"] isEqual:@"BetterMacFieldGraphics.bundle"])
-        fail(@"启动器缺少国际服 1.7.2 组件配置，请重新下载完整安装包。");
+    if(!clientMatches172(appPath,info,profile))fail([NSString stringWithFormat:
+        @"%@：当前客户端 %@ (%@) 的版本或代码尚未适配。请安装匹配的 1.7.2 / build 0。\nUnsupported client build; install the verified %@ 1.7.2 (build 0) in PlayCover.",
+        regionName172(),info[@"CFBundleShortVersionString"] ?: @"—",info[@"CFBundleIdentifier"] ?: @"—",selectedRegion172]);
 }
-static NSString *root172(void) {return [stateRoot() stringByAppendingPathComponent:@"PlayCover"];}
-static NSString *clone172(void) {return [root172() stringByAppendingPathComponent:@"Applications/com.gryphline.endfield.ios.app"];}
+static NSString *root172(void) {return [stateRoot() stringByAppendingPathComponent:[selectedRegion172 isEqual:@"cn"] ? @"CN/PlayCover" : @"PlayCover"];}
+static NSString *clone172(void) {return [root172() stringByAppendingPathComponent:cloneRelative172()];}
 static NSString *entry172(void) {return [root172() stringByAppendingPathComponent:@"Endfield.app"];}
 static BOOL sameFile172(NSString *a,NSString *b) {
     struct stat first,second;
     return a && b && !stat(a.fileSystemRepresentation,&first) && !stat(b.fileSystemRepresentation,&second) && first.st_dev==second.st_dev && first.st_ino==second.st_ino;
 }
 static NSRunningApplication *running172(void) {
-    for(NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.gryphline.endfield.ios"])
+    for(NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleID172()])
         if(!app.terminated && sameFile172(app.executableURL.path,[clone172() stringByAppendingPathComponent:@"Endfield"]))return app;
     return nil;
 }
 static void requirePublic172(void) {
-    for(NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.gryphline.endfield.ios"])
+    for(NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:bundleID172()])
         if(!app.terminated && !sameFile172(app.executableURL.path,[clone172() stringByAppendingPathComponent:@"Endfield"]))
-            fail(@"另一份国际服游戏正在运行。请先退出游戏，再启动 BetterMacField 公开版。");
+            fail(@"另一份同服游戏正在运行。请先退出游戏，再启动 BetterMacField 公开版。");
 }
 static NSString *command172(NSString *executable,NSArray<NSString *> *arguments) {
     NSTask *task=[NSTask new];task.executableURL=[NSURL fileURLWithPath:executable];task.arguments=arguments;
@@ -99,7 +55,7 @@ static NSDictionary *cloneInfo172(NSString *source) {
     return info;
 }
 static BOOL validClone172(NSString *root,NSString *source,NSDictionary *snapshot) {
-    NSString *clone=[root stringByAppendingPathComponent:@"Applications/com.gryphline.endfield.ios.app"];
+    NSString *clone=[root stringByAppendingPathComponent:cloneRelative172()];
     NSString *alias=[root stringByAppendingPathComponent:@"Endfield.app"];
     NSDictionary *receipt=readJSON([root stringByAppendingPathComponent:@"public-game.json"]);
     if(![receipt[@"source"] isEqual:snapshot] || ![clone.stringByResolvingSymlinksInPath isEqual:clone] ||
@@ -114,7 +70,7 @@ static BOOL validClone172(NSString *root,NSString *source,NSDictionary *snapshot
         for(NSString *name in names){
             NSString *item=[alias stringByAppendingPathComponent:name];
             if([name isEqual:@"Info.plist"]){if(![[NSData dataWithContentsOfFile:item] isEqual:[NSData dataWithContentsOfFile:[clone stringByAppendingPathComponent:name]]])return NO;}
-            else if(![[NSFileManager.defaultManager destinationOfSymbolicLinkAtPath:item error:nil] isEqual:[@"../Applications/com.gryphline.endfield.ios.app" stringByAppendingPathComponent:name]])return NO;
+            else if(![[NSFileManager.defaultManager destinationOfSymbolicLinkAtPath:item error:nil] isEqual:[[@".." stringByAppendingPathComponent:cloneRelative172()] stringByAppendingPathComponent:name]])return NO;
         }
         signed172(clone);return YES;
     }@catch(NSException *e){return NO;}
@@ -137,21 +93,22 @@ static void copyClone172(NSString *source,NSString *target) {
 static void prepareClone172(NSString *source) {
     NSString *installed=clientPath();
     if(!sameFile172([source stringByAppendingPathComponent:@"Endfield"],[installed stringByAppendingPathComponent:@"Endfield"]))
-        fail(@"请使用 PlayCover 已安装的国际服原游戏创建公开版副本。");
+        fail(@"请使用 PlayCover 已安装的所选区域原游戏创建公开版副本。");
     source=installed;validate172(source);
-    NSFileManager *fm=NSFileManager.defaultManager;directory(stateRoot());
-    int lock=open([stateRoot() stringByAppendingPathComponent:@"public-game.lock"].fileSystemRepresentation,O_CREAT|O_RDWR|O_CLOEXEC,0600);
+    NSFileManager *fm=NSFileManager.defaultManager;NSString *parent=root172().stringByDeletingLastPathComponent;
+    if(![parent.stringByResolvingSymlinksInPath isEqual:parent])fail(@"副本目录不能是符号链接。");directory(parent);
+    int lock=open([parent stringByAppendingPathComponent:@"public-game.lock"].fileSystemRepresentation,O_CREAT|O_RDWR|O_CLOEXEC,0600);
     if(lock<0 || flock(lock,LOCK_EX)){if(lock>=0)close(lock);fail(@"无法锁定公开版游戏副本。");}
-    NSString *stage=[stateRoot() stringByAppendingPathComponent:[@".public-game-" stringByAppendingString:NSUUID.UUID.UUIDString]];
+    NSString *stage=[parent stringByAppendingPathComponent:[@".public-game-" stringByAppendingString:NSUUID.UUID.UUIDString]];
     @try{
         NSDictionary *snapshot=snapshot172(source);
         if(validClone172(root172(),source,snapshot))return;
         if(running172())fail(@"公开版组件已更新。请先退出游戏，再重新启动以更新副本。");
         BOOL exists=[fm fileExistsAtPath:root172()];
-        if(![root172().stringByResolvingSymlinksInPath isEqual:root172()] || (exists && !readJSON([root172() stringByAppendingPathComponent:@"public-game.json"])))fail(@"公开版副本目录被其他文件占用，请检查 Application Support/BetterMacField/PlayCover。");
+        if(![root172().stringByResolvingSymlinksInPath isEqual:root172()] || (exists && !readJSON([root172() stringByAppendingPathComponent:@"public-game.json"])))fail(@"公开版副本目录被其他文件占用，请检查 Application Support/BetterMacField 下所选客户端的副本。");
         NSString *resources=NSBundle.mainBundle.resourcePath;
         signed172(source);signed172([resources stringByAppendingPathComponent:@"BetterMacField172.dylib"]);signed172([resources stringByAppendingPathComponent:@"BetterMacFieldGraphics.bundle"]);
-        NSString *clone=[stage stringByAppendingPathComponent:@"Applications/com.gryphline.endfield.ios.app"];
+        NSString *clone=[stage stringByAppendingPathComponent:cloneRelative172()];
         copyClone172(source,clone);
         for(NSString *relative in @[@"Endfield",@"Info.plist",@"_CodeSignature/CodeResources"]){
             NSString *item=[clone stringByAppendingPathComponent:relative];
@@ -175,7 +132,7 @@ static void prepareClone172(NSString *source) {
         for(NSString *name in [fm contentsOfDirectoryAtPath:clone error:nil]){
             NSError *error=nil;NSString *target=[alias stringByAppendingPathComponent:name];
             BOOL copied=[name isEqual:@"Info.plist"] ? [fm copyItemAtPath:[clone stringByAppendingPathComponent:name] toPath:target error:&error] :
-                [fm createSymbolicLinkAtPath:target withDestinationPath:[@"../Applications/com.gryphline.endfield.ios.app" stringByAppendingPathComponent:name] error:&error];
+                [fm createSymbolicLinkAtPath:target withDestinationPath:[[@".." stringByAppendingPathComponent:cloneRelative172()] stringByAppendingPathComponent:name] error:&error];
             if(!copied)fail(error.localizedDescription);
         }
         if(![snapshot isEqual:snapshot172(source)])fail(@"创建副本期间原游戏发生变化，请重试。");

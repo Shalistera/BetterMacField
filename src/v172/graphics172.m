@@ -1,6 +1,7 @@
-// Public graphics controls for the 1.7.2 global PlayCover client.
+// Public graphics controls for the global and CN 1.7.2 PlayCover clients.
 #import <AppKit/AppKit.h>
 #import "runtime172.h"
+#import "client_identity172.h"
 #include <dlfcn.h>
 #include <unistd.h>
 #include <stdatomic.h>
@@ -8,6 +9,12 @@
 @interface BMFGraphics172 : NSObject
 + (void)activateWithRequest:(NSDictionary *)request;
 @end
+
+static NSDictionary *gameProfile172;
+static NSUUID *gameUUID172;
+static BOOL gameUUIDBytesMatch172(const uint8_t *bytes) {
+    return gameUUID172 && [gameUUID172 isEqual:[[NSUUID alloc] initWithUUIDBytes:bytes]];
+}
 
 static NSString *graphicsResource172(NSString *name) {
     return [[NSBundle bundleForClass:BMFGraphics172.class].resourcePath stringByAppendingPathComponent:name];
@@ -257,7 +264,7 @@ static void writeStatus(NSMutableDictionary *state) {
     NSData *data = [NSJSONSerialization isValidJSONObject:state] ?
         [NSJSONSerialization dataWithJSONObject:state options:0 error:NULL] : nil;
     NSError *error = nil;
-    if (![data writeToFile:runtimeFile172(@"graphics172-status.json", YES)
+    if (![data writeToFile:runtimeFile172(@"graphics172-status.json")
                    options:NSDataWritingAtomic error:&error]) {
         static BOOL reported;
         if (!reported) NSLog(@"BetterMacField 无法写入游戏状态文件：%@", error.localizedDescription);
@@ -293,6 +300,15 @@ static void stopWithGame(dispatch_source_t timer) {
     NSDictionary *settings = request[@"settings"];
     session = request[@"session"];
     NSMutableDictionary *initial = [@{@"pid":@(getpid())} mutableCopy];
+    NSBundle *game=NSBundle.mainBundle;
+    NSString *region=regionForBundle172(game.bundleIdentifier);
+    NSDictionary *profiles=[[NSBundle bundleForClass:self] objectForInfoDictionaryKey:@"BMFClients172"];
+    gameProfile172=region ? profiles[region] : nil;
+    if (!clientMatches172(game.bundlePath,game.infoDictionary,gameProfile172) || [gameProfile172[@"renderCallbacks"] count]!=3) {
+        initial[@"error"]=@"游戏代码不匹配，未启用增强。 / Unsupported client build; enhancements disabled.";
+        writeStatus(initial); return;
+    }
+    gameUUID172=[[NSUUID alloc] initWithUUIDString:gameProfile172[@"unityUUID"]];
     writeStatus(initial);
     selected = [@{@"shadowResolution":@0, @"vegetationDensity":@-1, @"sharpen":@"original",
                   @"lod":@"restore", @"backgroundLimit":@YES, @"upscaler":@"taau", @"quality":@"质量",
@@ -311,6 +327,7 @@ static void stopWithGame(dispatch_source_t timer) {
     NSMutableDictionary *renderState = [NSMutableDictionary dictionary];
     void (^menuAction)(NSString *, id) = ^(NSString *key, id value) {
         NSDictionary *command = [key isEqual:@"compare"] ? @{@"op":@"compare", @"enabled":value} :
+                                [key isEqual:@"settings"] ? @{@"op":@"configure", @"settings":value} :
                                 @{@"op":@"configure", @"settings":@{key:value}};
         NSMutableDictionary *request = [command mutableCopy];
         request[@"id"] = NSUUID.UUID.UUIDString;

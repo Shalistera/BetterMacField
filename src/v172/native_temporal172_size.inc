@@ -153,8 +153,7 @@ static BOOL native172OriginalCode(const void *code,uintptr_t *rva) {
             const struct load_command *command=(const void *)((const uint8_t *)commands.bytes+offset);
             if (command->cmdsize<sizeof *command || command->cmdsize>commands.length-offset) return NO;
             if (command->cmd==LC_UUID && command->cmdsize==sizeof(struct uuid_command)) {
-                const uint8_t expectedUUID[]={0x0f,0x92,0x77,0x0a,0x69,0x38,0x39,0x7f,0xa0,0xf2,0x27,0x2e,0x99,0x4b,0xa2,0x86};
-                uuid=!memcmp(((const struct uuid_command *)command)->uuid,expectedUUID,sizeof expectedUUID);
+                uuid=gameUUIDBytesMatch172(((const struct uuid_command *)command)->uuid);
             }
             if (command->cmd==LC_SEGMENT_64 && command->cmdsize>=sizeof(struct segment_command_64)) {
                 const struct segment_command_64 *segment=(const void *)command;
@@ -299,14 +298,14 @@ static BOOL native172InstallSize(void *hg) {
     if (wrapper[2]!=(uintptr_t)native172RenderBridge) {
         // Current 1.7.2 runtime wrapper + disk disassembly: x0=owner, x1=request,
         // x2=culling, x3=camera, x4=context, x5=command; request+0xa8 is envPhase.
-        const uintptr_t expectedRVAs[3]={0x10a35f58,0x10a36178,0x10a36634};
+        NSArray<NSNumber *> *expectedRVAs=gameProfile172[@"renderCallbacks"];
         const uint8_t expectedBytes[3][16]={
             {0xff,0x03,0x03,0xd1,0xf8,0x5f,0x08,0xa9,0xf6,0x57,0x09,0xa9,0xf4,0x4f,0x0a,0xa9},
             {0xfc,0x6f,0xba,0xa9,0xfa,0x67,0x01,0xa9,0xf8,0x5f,0x02,0xa9,0xf6,0x57,0x03,0xa9},
             {0xf4,0x4f,0xbe,0xa9,0xfd,0x7b,0x01,0xa9,0xfd,0x43,0x00,0x91,0xf3,0x03,0x00,0xaa}};
         for (size_t i=0;i<3;++i) {
             uintptr_t rva=0; uint8_t bytes[16];
-            if (!native172OriginalCode((const void *)wrapper[i+1],&rva) || rva!=expectedRVAs[i] ||
+            if (!native172OriginalCode((const void *)wrapper[i+1],&rva) || rva!=expectedRVAs[i].unsignedLongLongValue ||
                 !native172Read(wrapper[i+1],bytes,sizeof bytes) || memcmp(bytes,expectedBytes[i],sizeof bytes)) {
                 native172Reason=[NSString stringWithFormat:@"callbackIdentity:%zu",i]; return NO;
             }

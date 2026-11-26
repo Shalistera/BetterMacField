@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage prepared global iOS 1.7.2 rendering exports (no asset extraction)."""
+"""Stage prepared shared iOS 1.7.2 rendering exports (no asset extraction)."""
 import argparse
 import hashlib
 import json
@@ -32,7 +32,7 @@ def inventory(source):
     for folder in FOLDERS:
         catalog = json.loads(read_file(folder, 'manifest.json'))
         if catalog.get('version') != '1.7.2':
-            raise ValueError(f'Expected global iOS 1.7.2 export: {folder}')
+            raise ValueError(f'Expected shared iOS 1.7.2 export: {folder}')
         catalogs[folder] = catalog
     for folder, count in [('character172', 6), ('scene172', 24)]:
         catalog = catalogs[folder]
@@ -55,7 +55,9 @@ def inventory(source):
     read_file('native172', motion['file'], motion['sha256'])
     # Missing the terrain consumers caused ground material loss with MetalFX.
     terrain = native['terrainDepth']['bindings']
-    if len(terrain) != 16 or len(native['depthConsumers']) != 18:
+    consumers, shaders = native['depthConsumers'], native.get('depthConsumerShaders', {})
+    # 18 named readers were not the whole set; the 1.7.2 package has 74, each mapped to its shader.
+    if len(terrain) != 16 or len(consumers) != 74 or shaders.keys() != consumers.keys():
         raise ValueError('Incomplete terrain/decal/visibility depth-consumer catalog')
     if any(native['depthConsumers'].get(key) != value['slot'] for key, value in terrain.items()):
         raise ValueError('Terrain depth slots disagree with the consumer catalog')

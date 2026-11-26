@@ -231,7 +231,7 @@ static void handleLiveCommand(NSDictionary *command) {
 }
 
 static void readLiveCommand(void) {
-    NSString *file = runtimeFile172(@"graphics172-command.json", YES);
+    NSString *file = runtimeFile172(@"graphics172-command.json");
     NSData *data = [NSData dataWithContentsOfFile:file];
     if (!data.length || data.length > 8192) return;
     NSDictionary *command = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];

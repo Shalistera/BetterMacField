@@ -8,7 +8,7 @@ rights holders. PlayCover/PlayTools and Apple's Metal/MetalFX remain separate
 components with their own terms. They are not bundled in this repository.
 
 The full-feature launcher package contains rendering programs prepared from
-a verified global iOS 1.7.2 game export: adapted character/scene lighting
+an iOS 1.7.2 export verified against both global and CN assets: character/scene lighting
 programs, original GTAO/contact kernels, and motion/depth binding metadata.
 These inputs stay outside the tracked MIT tree under build/Graphics172 and
 are not relicensed under MIT. The preparation helper consumes a prepared

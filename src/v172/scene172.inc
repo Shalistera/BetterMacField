@@ -15,7 +15,7 @@ static BOOL sceneInstalled172;
 static NSString *metal_sha256(NSData *data) { return data ? wardHash172(data.bytes,data.length) : nil; }
 static NSString *runtime_path(NSString *name) {
     if([name isEqual:@"endfield-official-contact"])return graphicsResource172(@"scene172/official-contact");
-    return runtimeFile172(name,YES);
+    return runtimeFile172(name);
 }
 static void metal_watch_library(id library,NSString *identity) {
     objc_setAssociatedObject(library,&sceneLibraryKey172,identity,OBJC_ASSOCIATION_COPY_NONATOMIC);

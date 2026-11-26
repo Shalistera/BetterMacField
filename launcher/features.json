@@ -3,7 +3,7 @@
     {
       "page": "画面",
       "key": "height",
-      "title": "输出分辨率",
+      "title": "分辨率",
       "default": 1080,
       "choices": [
         {
@@ -23,49 +23,49 @@
           "value": 2160
         }
       ],
-      "help": ""
+      "help": "输出画面的像素尺寸，越高越清晰也越吃 GPU。"
     },
     {
       "page": "画面",
       "key": "upscaler",
-      "title": "超分模式",
+      "title": "超分辨率",
       "default": "metalfx-spatial",
       "choices": [
         {
-          "title": "MetalFX Spatial · 默认",
+          "title": "MetalFX 空间超分 · 推荐",
           "value": "metalfx-spatial"
         },
         {
-          "title": "MetalFX Temporal",
+          "title": "MetalFX 时间超分 · 实验",
           "value": "metalfx-native"
         },
         {
-          "title": "TAAU · 原版",
+          "title": "游戏自带",
           "value": "taau"
         }
       ],
-      "help": "Temporal 画面更好，但可能存在 bug。"
+      "help": "先用较低分辨率渲染再放大以提高帧率。时间超分更清晰，偶尔会有画面问题。"
     },
     {
       "page": "画面",
       "key": "quality",
-      "title": "超分质量",
+      "title": "渲染比例",
       "default": "质量",
       "choices": [
         {
-          "title": "质量 · 66.7%",
+          "title": "清晰 · 66.7%",
           "value": "质量"
         },
         {
-          "title": "平衡 · 58.8%",
+          "title": "均衡 · 58.8%",
           "value": "平衡"
         },
         {
-          "title": "性能 · 50%",
+          "title": "流畅 · 50%",
           "value": "性能"
         }
       ],
-      "help": ""
+      "help": "放大前先渲染多大的画面；比例越高越清晰、越吃 GPU。"
     },
     {
       "page": "画面",
@@ -78,20 +78,20 @@
           "value": "original"
         },
         {
-          "title": "关闭 TAAU 锐化",
+          "title": "减弱",
           "value": "no-taau"
         },
         {
-          "title": "关闭全部锐化",
+          "title": "关闭",
           "value": "off"
         }
       ],
-      "help": ""
+      "help": "画面发硬或物体边缘有白边时调低。"
     },
     {
       "page": "画面",
       "key": "lod",
-      "title": "场景 LOD 距离",
+      "title": "远景细节",
       "default": "restore",
       "choices": [
         {
@@ -99,20 +99,20 @@
           "value": "restore"
         },
         {
-          "title": "PC 中档",
+          "title": "电脑版 · 中",
           "value": "pc-medium"
         },
         {
-          "title": "PC 高档",
+          "title": "电脑版 · 高",
           "value": "pc-high"
         }
       ],
-      "help": "已加载的远景可能延迟切换。"
+      "help": "远处建筑和地形的精细程度；切换后远景稍后刷新。"
     },
     {
       "page": "画面",
       "key": "vegetationDensity",
-      "title": "植被密度",
+      "title": "草丛密度",
       "default": 1,
       "choices": [
         {
@@ -120,11 +120,11 @@
           "value": -1
         },
         {
-          "title": "低 · 50%",
+          "title": "稀疏 · 50%",
           "value": 0.5
         },
         {
-          "title": "中 · 70%",
+          "title": "适中 · 70%",
           "value": 0.7
         },
         {
@@ -132,33 +132,35 @@
           "value": 1
         }
       ],
-      "help": "调整当前场景已有草丛、芦苇的显示密度；100% 完整显示。"
+      "help": "地面草丛、芦苇的疏密，越密越吃 GPU。"
     },
     {
       "page": "光影",
       "key": "selfShadow",
       "title": "角色自阴影",
       "default": true,
-      "help": ""
+      "help": "头发和衣服会在角色身上投下影子。"
     },
     {
       "page": "光影",
       "key": "characterLighting",
-      "title": "角色光照与阴影滤波",
+      "title": "柔和明暗",
       "default": true,
-      "help": ""
+      "help": "明暗交界和影子边缘接近电脑版。",
+      "restart": true
     },
     {
       "page": "光影",
       "key": "characterSpecular",
-      "title": "角色 PC 高光公式 · 实验",
+      "title": "电脑版高光 · 实验",
       "default": false,
-      "help": ""
+      "help": "皮肤和衣物的高光接近电脑版。",
+      "restart": true
     },
     {
       "page": "光影",
       "key": "shadowResolution",
-      "title": "阴影精度",
+      "title": "阴影清晰度",
       "default": 1024,
       "choices": [
         {
@@ -166,71 +168,188 @@
           "value": 0
         },
         {
-          "title": "1024",
+          "title": "中",
           "value": 1024
         },
         {
-          "title": "2048",
+          "title": "高",
           "value": 2048
         }
       ],
-      "help": ""
+      "help": "影子边缘的精细程度。"
     },
     {
       "page": "光影",
       "key": "gtao",
-      "title": "GTAO 环境遮蔽",
+      "title": "环境光遮蔽",
       "default": true,
-      "help": ""
+      "help": "墙角、缝隙和物体接地处更有立体感。"
     },
     {
       "page": "光影",
       "key": "contact",
       "title": "接触阴影",
       "default": true,
-      "help": ""
+      "help": "脚下和物体接缝处的细小影子。"
     },
     {
       "page": "光影",
       "key": "ssr",
-      "title": "屏幕空间反射 SSR",
+      "title": "地面与水面反射",
       "default": false,
-      "help": ""
+      "help": "水面和光滑地面映出周围景物，较吃 GPU。"
     },
     {
       "page": "操作",
       "key": "keyboard",
-      "title": "自动键鼠模式",
+      "title": "键鼠操作",
       "default": true,
-      "help": "滚轮缩放镜头；Alt／Option＋滚轮选择交互项。"
+      "help": "自动切到键鼠模式。滚轮缩放镜头，Option＋滚轮选择交互项。"
     },
     {
       "page": "操作",
       "key": "backgroundLimit",
-      "title": "后台节能 · 15 FPS",
+      "title": "后台省电",
       "default": true,
-      "help": ""
+      "help": "切到其他窗口时把游戏降到 15 帧。"
     },
     {
       "page": "操作",
       "key": "metalHUD",
-      "title": "启动时显示 Metal HUD",
+      "title": "帧率浮窗",
       "default": false,
-      "help": ""
+      "help": "在画面角落显示帧率等性能数据。",
+      "restart": true
     },
     {
       "page": "操作",
       "key": "compareRendering",
-      "title": "对比时使用 TAAU · 50% 渲染",
+      "title": "对比时也换回原版超分",
       "default": true,
-      "help": ""
+      "help": "⌘G 对比时一并换回游戏自带超分和 50% 渲染。"
     },
     {
       "page": "操作",
       "key": "compareLOD",
-      "title": "对比时恢复手机 LOD",
+      "title": "对比时也恢复手机远景",
       "default": true,
-      "help": ""
+      "help": "⌘G 对比时远景也换回手机默认。"
     }
-  ]
+  ],
+  "ui172": {
+    "pages": [
+      {
+        "title": "画质",
+        "sections": [
+          {
+            "keys": [
+              "height",
+              "upscaler",
+              "quality"
+            ]
+          },
+          {
+            "title": "细节",
+            "menu": "细节调整",
+            "keys": [
+              "shadowResolution",
+              "lod",
+              "vegetationDensity",
+              "gtao",
+              "contact",
+              "ssr",
+              "sharpen"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "角色",
+        "sections": [
+          {
+            "title": "光影",
+            "keys": [
+              "selfShadow",
+              "characterLighting",
+              "characterSpecular"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "操作",
+        "sections": [
+          {
+            "title": "键鼠",
+            "keys": [
+              "keyboard"
+            ]
+          },
+          {
+            "title": "界面",
+            "keys": [
+              "backgroundLimit",
+              "metalHUD"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "高级",
+        "sections": [
+          {
+            "title": "按 ⌘G 对比原画时",
+            "keys": [
+              "compareRendering",
+              "compareLOD"
+            ]
+          },
+          {
+            "title": "维护",
+            "maintenance": true,
+            "keys": []
+          }
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "title": "流畅",
+        "values": {
+          "shadowResolution": 0,
+          "lod": "restore",
+          "vegetationDensity": 0.5,
+          "gtao": false,
+          "contact": false,
+          "ssr": false
+        }
+      },
+      {
+        "title": "推荐",
+        "values": {
+          "shadowResolution": 1024,
+          "lod": "restore",
+          "vegetationDensity": 1,
+          "gtao": true,
+          "contact": true,
+          "ssr": false
+        }
+      },
+      {
+        "title": "极致",
+        "values": {
+          "shadowResolution": 2048,
+          "lod": "pc-high",
+          "vegetationDensity": 1,
+          "gtao": true,
+          "contact": true,
+          "ssr": true
+        }
+      }
+    ],
+    "keepOnReset": [
+      "height",
+      "keyboard"
+    ]
+  }
 }

@@ -73,7 +73,7 @@ static BOOL sceneOriginalCode172(const void *code) {
             const struct load_command *command = (const void *)(bytes+offset);
             if (command->cmdsize<sizeof *command || command->cmdsize>commands.length-offset) return NO;
             if (command->cmd==LC_UUID && command->cmdsize>=sizeof(struct uuid_command)) {
-                hasUUID = YES;
+                hasUUID = gameUUIDBytesMatch172(((const struct uuid_command *)command)->uuid);
             }
             if (command->cmd==LC_SEGMENT_64 && command->cmdsize>=sizeof(struct segment_command_64)) {
                 const struct segment_command_64 *segment = (const void *)command;

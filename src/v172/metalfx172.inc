@@ -75,10 +75,14 @@ static bool *fxCppFlag172(void) {
     searched = YES;
     void *(*resolve)(const char *) = dlsym(RTLD_DEFAULT, "il2cpp_resolve_icall");
     const uint32_t *wrapper = resolve ? resolve("UnityEngine.HyperGryph.HGGraphicsUtils::get_enableCppRenderPath()") : NULL;
+    Dl_info image={0};
+    if (!wrapper || !dladdr((void *)domainGet,&image) || !image.dli_fbase ||
+        (uintptr_t)wrapper-(uintptr_t)image.dli_fbase != [gameProfile172[@"cppWrapper"] unsignedLongLongValue]) return NULL;
     // stp x29,x30,[sp,#-16]! ; mov x29,sp ; bl getter ; ldp x29,x30,[sp],#16 ; ret
-    if (!wrapper || wrapper[0] != 0xa9bf7bfd || wrapper[1] != 0x910003fd || (wrapper[2] & 0xfc000000) != 0x94000000 ||
+    if (wrapper[0] != 0xa9bf7bfd || wrapper[1] != 0x910003fd || (wrapper[2] & 0xfc000000) != 0x94000000 ||
         wrapper[3] != 0xa8c17bfd || wrapper[4] != 0xd65f03c0) return NULL;
     const uint32_t *getter = wrapper + 2 + (((int32_t)(wrapper[2] << 6)) >> 6);
+    if ((uintptr_t)getter-(uintptr_t)image.dli_fbase != [gameProfile172[@"cppGetter"] unsignedLongLongValue]) return NULL;
     // adrp x8, page ; ldrb w0, [x8, #offset] ; ret
     uint32_t adrp = getter[0], load = getter[1];
     if ((adrp & 0x9f00001f) != 0x90000008 || (load & 0xffc003ff) != 0x39400100 || getter[2] != 0xd65f03c0) return NULL;
@@ -86,8 +90,7 @@ static bool *fxCppFlag172(void) {
     uint8_t *candidate = (uint8_t *)(((uintptr_t)getter & ~(uintptr_t)0xfff) + pages * 4096 + ((load >> 10) & 0xfff));
     Dl_info code, data;
     if (!dladdr(getter, &code) || !dladdr(candidate, &data) || code.dli_fbase != data.dli_fbase) return NULL;
-    // Global 1.7.2 keeps this flag at one known place in UnityFramework's writable data.
-    if ((uintptr_t)candidate - (uintptr_t)code.dli_fbase != 0x1562b369) return NULL;
+    if ((uintptr_t)candidate - (uintptr_t)code.dli_fbase != [gameProfile172[@"cppFlag"] unsignedLongLongValue]) return NULL;
     vm_address_t address = (vm_address_t)candidate;
     vm_size_t size = 0;
     vm_region_basic_info_data_64_t info;

@@ -11,8 +11,8 @@ import bettermacfield as bmf
 import prepare_graphics172
 
 
-VERSION = '0.5.0'
-BUILD_NUMBER = '10'
+VERSION = '0.6.0'
+BUILD_NUMBER = '11'
 
 
 def build_current(resources, include_assets=True):
@@ -38,7 +38,7 @@ def build_current(resources, include_assets=True):
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(
         CFBundleIdentifier='io.shalistera.BetterMacField.Graphics',
         CFBundleExecutable=binary.name, CFBundlePackageType='BNDL',
-        CFBundleVersion=BUILD_NUMBER, NSPrincipalClass='BMFGraphics172')))
+        CFBundleVersion=BUILD_NUMBER, NSPrincipalClass='BMFGraphics172', BMFClients172=bmf.CLIENTS)))
     subprocess.run(['codesign', '--force', '--sign', '-', str(bundle)], check=True)
     entry = resources/'BetterMacField172.dylib'
     subprocess.run(['xcrun', 'clang', '-dynamiclib', '-fobjc-arc',
@@ -68,14 +68,8 @@ def main():
     payload.update({str(p.relative_to(resources)):hashlib.sha256(p.read_bytes()).hexdigest()
                     for p in bundle.rglob('*') if p.is_file()})
     payload[entry.name] = hashlib.sha256(entry.read_bytes()).hexdigest()
-    profiles = {region: dict(bundleID=bundle, version='1.7.2')
-                for region, bundle in bmf.CLIENTS.items()}
-    current = dict(version='1.7.2', build='0',
-        unityUUID='0f92770a-6938-397f-a0f2-272e994ba286',
-        metadataSHA256='3de06a6ee4f48cd920f2dd617f6a7ebb4755ba5308d9ad592b328a06c52def44',
-        entry=entry.name, graphics=bundle.name)
-    (resources/'clients.json').write_text(json.dumps(dict(clients=profiles, displaySettings=bmf.DISPLAY_SETTINGS,
-        current172=current, payload=payload), indent=2)+'\n')
+    (resources/'clients.json').write_text(json.dumps(dict(clients=bmf.CLIENTS,
+        displaySettings=bmf.DISPLAY_SETTINGS, payload=payload), indent=2)+'\n')
     (contents/'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier='io.shalistera.BetterMacField',
         CFBundleName='BetterMacField', CFBundleDisplayName='BetterMacField', CFBundleExecutable='BetterMacField',
         CFBundlePackageType='APPL', CFBundleShortVersionString=VERSION, CFBundleVersion=BUILD_NUMBER, CFBundleIconFile='AppIcon',

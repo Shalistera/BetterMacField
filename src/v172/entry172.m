@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "runtime172.h"
+#import "client_identity172.h"
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -12,9 +13,10 @@
 __attribute__((constructor)) static void registerGraphics172(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSBundle *game = NSBundle.mainBundle;
-        if (![game.bundleIdentifier isEqual:@"com.gryphline.endfield.ios"] ||
+        if (!regionForBundle172(game.bundleIdentifier) ||
+            ![[game objectForInfoDictionaryKey:@"CFBundleVersion"] isEqual:@"0"] ||
             ![[game objectForInfoDictionaryKey:@"CFBundleShortVersionString"] isEqual:@"1.7.2"]) return;
-        NSString *requestPath = runtimeFile172(@"graphics172-activation.json", YES);
+        NSString *requestPath = runtimeFile172(@"graphics172-activation.json");
         NSString *directory = requestPath.stringByDeletingLastPathComponent;
         if (![NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES
                                                        attributes:nil error:NULL]) return;
@@ -44,14 +46,14 @@ __attribute__((constructor)) static void registerGraphics172(void) {
             NSDictionary *state = @{@"pid":@(getpid()), @"session":request[@"session"],
                                     @"error":error.localizedDescription ?: @"图形组件缺少启动入口。"};
             NSData *message = [NSJSONSerialization dataWithJSONObject:state options:0 error:NULL];
-            [message writeToFile:runtimeFile172(@"graphics172-status.json", YES) atomically:YES];
+            [message writeToFile:runtimeFile172(@"graphics172-status.json") atomically:YES];
         };
         dispatch_source_set_event_handler(watcher, activate);
         dispatch_source_set_cancel_handler(watcher, ^{ close(fd); watcher = nil; });
         dispatch_resume(watcher);
         NSDictionary *hello = @{@"pid":@(getpid()), @"instance":instance};
         NSData *data = [NSJSONSerialization dataWithJSONObject:hello options:0 error:NULL];
-        [data writeToFile:runtimeFile172(@"graphics172-instance.json", YES) atomically:YES];
+        [data writeToFile:runtimeFile172(@"graphics172-instance.json") atomically:YES];
         activate();
     });
 }

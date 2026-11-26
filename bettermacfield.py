@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Maintainer CLI for the global iOS 1.7.2 native launcher."""
+"""Maintainer CLI for the global/CN iOS 1.7.2 native launcher."""
 import argparse
 from pathlib import Path
 import subprocess
 import sys
 
+from clients172 import CLIENTS
+
 ROOT = Path(__file__).resolve().parent
 BUILD = ROOT/'build'
-CLIENTS = {'global': 'com.gryphline.endfield.ios'}
-DEFAULT_APP = Path.home()/'Library/Containers/io.playcover.PlayCover/Applications/com.gryphline.endfield.ios.app'
 DISPLAY_SETTINGS = dict(customScaler=2.0, resolution=6, resizableAspectRatioWidth=16,
                         resizableAspectRatioHeight=9, keymapping=False)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--app', type=Path, default=DEFAULT_APP, help='Exact PlayCover app bundle')
-    parser.add_argument('--region', choices=['global'], default='global')
+    parser.add_argument('--app', type=Path, help='Exact PlayCover app bundle')
+    parser.add_argument('--region', choices=tuple(CLIENTS))
     actions = parser.add_subparsers(dest='action', required=True)
     for name in ['check', 'build', 'status', 'restore-settings']:
         actions.add_parser(name)
@@ -31,8 +31,11 @@ def main():
         executable = ROOT/'dist/BetterMacField.app/Contents/MacOS/BetterMacField'
         if not executable.is_file():
             raise RuntimeError('Prepare the rendering export, then run build_release.py first.')
-        command = [str(executable), '--'+args.action, '--region', 'global',
-                   '--app', str(args.app.expanduser().resolve())]
+        command = [str(executable), '--'+args.action]
+        if args.region:
+            command += ['--region', args.region]
+        if args.app:
+            command += ['--app', str(args.app.expanduser().resolve())]
         if getattr(args, 'restart', False):
             command.append('--restart')
         subprocess.run(command, check=True)

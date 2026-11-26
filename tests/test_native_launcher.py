@@ -14,6 +14,8 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 UNITY_UUID = uuid.UUID('0f92770a-6938-397f-a0f2-272e994ba286')
 BUNDLE_ID = 'com.gryphline.endfield.ios'
+CN_UUID = uuid.UUID('5e01e569-4b4d-35aa-b5d1-8f3f97c5278a')
+CN_ID = 'com.hypergryph.endfield'
 
 
 def digest(data):
@@ -39,7 +41,23 @@ class NativeLauncherCompatibility(unittest.TestCase):
         common = ['xcrun', 'clang', '-fobjc-arc', '-arch', 'arm64', '-mmacosx-version-min=13.0',
                   '-Wno-deprecated-declarations', '-Wno-incompatible-pointer-types',
                   '-framework', 'AppKit', '-framework', 'Foundation']
-        result = subprocess.run(common + [str(ROOT/'launcher/main.m'), '-o', str(cls.executable)],
+        cls.home = cls.root/'home'
+        source = cls.root/'launcher.m'
+        source.write_text('#import <AppKit/AppKit.h>\n#define NSHomeDirectory() @'
+                          + json.dumps(str(cls.home)) + '\n#define main launcher_main\n#include '
+                          + json.dumps(str(ROOT/'launcher/main.m')) + '\n#undef main\n' + r'''
+int main(int argc,const char **argv) {
+    if (argc > 1 && !strcmp(argv[1], "--fixture-restore")) {
+        @autoreleasepool { @try {
+            selectRegion172(NSProcessInfo.processInfo.arguments,NO);
+            displaySettings(clientPath(),restoreRecord(),@{},YES);
+            return 0;
+        } @catch(NSException *e) { fprintf(stderr,"%s\n",e.reason.UTF8String); return 1; } }
+    }
+    return launcher_main(argc,argv);
+}
+''')
+        result = subprocess.run(common + [str(source), '-o', str(cls.executable)],
                                 capture_output=True, text=True)
         if result.returncode:
             raise RuntimeError(result.stderr)
@@ -69,8 +87,16 @@ int main(int argc,const char **argv) {
                          CFBundleVersion='0', CFBundleExecutable='Endfield')
         self.unity = self.app/'Frameworks/UnityFramework.framework/UnityFramework'
         self.unity.parent.mkdir(parents=True, exist_ok=True)
-        self.unity.write_bytes(struct.pack('<IiiIIIII', 0xfeedfacf, 0x100000c, 0, 6, 1, 24, 0, 0)
-                               + struct.pack('<II16s', 0x1b, 24, UNITY_UUID.bytes))
+        self.code = code = b'test instructions'
+        self.cn_code = b'CN!! instructions'
+        cmdsize = 24 + 72 + 80
+        offset = 32 + cmdsize
+        uuid_cmd = struct.pack('<II16s', 0x1b, 24, UNITY_UUID.bytes)
+        segment = struct.pack('<II16sQQQQiiII', 0x19, 152, b'__TEXT', 0, offset+len(code),
+                              0, offset+len(code), 5, 5, 1, 0)
+        section = struct.pack('<16s16sQQ8I', b'__text', b'__TEXT', offset, len(code), offset, *([0]*7))
+        self.unity.write_bytes(struct.pack('<IiiIIIII', 0xfeedfacf, 0x100000c, 0, 6, 2, cmdsize, 0, 0)
+                               + uuid_cmd + segment + section + code)
         self.metadata = self.app/'Data/Managed/Metadata/global-metadata.dat'
         self.metadata.parent.mkdir(parents=True, exist_ok=True)
         self.metadata.write_bytes(b'metadata fixture')
@@ -86,10 +112,10 @@ int main(int argc,const char **argv) {
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
         self.package = dict(
-            clients={'global': dict(bundleID=BUNDLE_ID, version='1.7.2')},
-            current172=dict(version='1.7.2', build='0', unityUUID=str(UNITY_UUID),
-                            metadataSHA256=digest(self.metadata.read_bytes()),
-                            entry='BetterMacField172.dylib', graphics='BetterMacFieldGraphics.bundle'),
+            clients={region: dict(bundleID=bundle, version='1.7.2', build='0', unityUUID=str(uid),
+                                  metadataSHA256=digest(self.metadata.read_bytes()), textSHA256=digest(text))
+                     for region, bundle, uid, text in [('global', BUNDLE_ID, UNITY_UUID, code),
+                                                       ('cn', CN_ID, CN_UUID, self.cn_code)]},
             payload={name: digest(data) for name, data in self.payload.items()})
         self.save_package()
         self.restore_root = self.root/'restore-fixture'
@@ -128,10 +154,59 @@ int main(int argc,const char **argv) {
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn('Verified global 1.7.2', result.stdout)
 
+    def test_cn_requires_its_own_unity_code(self):
+        self.info['CFBundleIdentifier'] = CN_ID
+        self.assertNotEqual(self.check('--region', 'cn').returncode, 0)
+        self.unity.write_bytes(self.unity.read_bytes().replace(UNITY_UUID.bytes, CN_UUID.bytes))
+        self.assertNotEqual(self.check('--region', 'cn').returncode, 0, 'the CN UUID alone is insufficient')
+        self.unity.write_bytes(self.unity.read_bytes().replace(self.code, self.cn_code))
+        for extra in ((), ('--region', 'cn')):
+            result = self.check(*extra)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('Verified cn 1.7.2', result.stdout)
+        self.assertNotEqual(self.check('--region', 'global').returncode, 0)
+
+    def test_region_selection_and_restore_use_the_selected_install(self):
+        playcover = self.home/'Library/Containers/io.playcover.PlayCover'
+        state = self.home/'Library/Application Support/BetterMacField'
+        state.mkdir(parents=True)
+        installs = playcover/'Applications'
+        settings = playcover/'App Settings'
+        settings.mkdir(parents=True)
+        def run(*args):
+            return subprocess.run([str(self.executable), *args], capture_output=True, text=True)
+
+        self.assertNotEqual(run('--check').returncode, 0)
+        for bundle, region, record_name in [(CN_ID, 'cn', 'playcover-settings-cn.json'),
+                                            (BUNDLE_ID, 'global', 'playcover-settings.json')]:
+            app = installs/(bundle+'.app')
+            shutil.copytree(self.app, app)
+            (app/'Info.plist').write_bytes(plistlib.dumps(dict(self.info, CFBundleIdentifier=bundle)))
+            if region == 'cn':
+                framework = app/self.unity.relative_to(self.app)
+                framework.write_bytes(framework.read_bytes().replace(UNITY_UUID.bytes, CN_UUID.bytes)
+                                      .replace(self.code, self.cn_code))
+                self.assertIn('Verified cn', run('--check').stdout)
+            plist = settings/(bundle+'.plist')
+            plist.write_bytes(plistlib.dumps(dict(keymapping=False)))
+            (state/record_name).write_text(json.dumps(dict(path=str(plist), original=dict(keymapping=True),
+                                                          absent=[], desired=dict(keymapping=False))))
+        self.assertIn('Both clients', run('--check').stderr)
+        self.assertIn('Verified global', run('--check', '--region', 'global').stdout)
+        global_plist, cn_plist = (settings/(bundle+'.plist') for bundle in (BUNDLE_ID, CN_ID))
+        global_record = state/'playcover-settings.json'
+        before = global_plist.read_bytes(), global_record.read_bytes()
+        result = run('--fixture-restore', '--region', 'cn')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(plistlib.loads(cn_plist.read_bytes()), dict(keymapping=True))
+        self.assertFalse((state/'playcover-settings-cn.json').exists())
+        self.assertEqual((global_plist.read_bytes(), global_record.read_bytes()), before)
+
     def test_current_identity_survives_signature_changes(self):
+        thin = self.unity.read_bytes()
         for signature in (b'first signature', b'another signing identity'):
             with self.subTest(signature=signature):
-                self.unity.write_bytes(self.unity.read_bytes()[:56] + signature)
+                self.unity.write_bytes(thin + signature)
                 result = self.check()
                 self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -144,7 +219,7 @@ int main(int argc,const char **argv) {
 
     def test_metadata_uuid_and_malformed_commands_are_rejected(self):
         original = self.unity.read_bytes()
-        for changed in ('metadata', 'uuid', 'malformed'):
+        for changed in ('metadata', 'uuid', 'text', 'malformed'):
             with self.subTest(changed=changed):
                 self.unity.write_bytes(original)
                 self.metadata.write_bytes(b'metadata fixture')
@@ -154,6 +229,8 @@ int main(int argc,const char **argv) {
                     value = bytearray(original)
                     if changed == 'uuid':
                         value[40:56] = uuid.uuid4().bytes
+                    elif changed == 'text':
+                        value[-1] ^= 1
                     else:
                         value[36:40] = struct.pack('<I', 0xffffffff)
                     self.unity.write_bytes(value)
