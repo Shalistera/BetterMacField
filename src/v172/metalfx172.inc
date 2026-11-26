@@ -2,6 +2,7 @@
 #import <Metal/Metal.h>
 #import <objc/runtime.h>
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
 #include "metalfx_history172.h"
 static uint32_t (*fxRoot172)(void *, bool);
 static uint32_t (*fxWeak172)(void *, bool);
@@ -207,7 +208,7 @@ static NSArray *fxTraceInstall172(void) {
         if (!strstr(raw, "FX") || (!temporal && !strstr(raw, "Spatial")) || [fxTraceClasses172 containsObject:@(raw)]) continue;
         unsigned int count = 0;
         Method *methods = class_copyMethodList(cls, &count);
-        BOOL hooked = NO;
+        BOOL hooked = NO, touched = NO;
         for (unsigned int j = 0; j < count; j++) {
             Method method = methods[j];
             SEL name = method_getName(method);
@@ -228,6 +229,7 @@ static NSArray *fxTraceInstall172(void) {
                     }
                 }));
             } else if (temporal && (name == setters[0] || name == setters[1])) {
+                touched = YES;
                 int axis = name == setters[1];
                 method_setImplementation(method, imp_implementationWithBlock(^(id object, float value) {
                     fxTraceRaw172[axis] = value;
@@ -236,7 +238,8 @@ static NSArray *fxTraceInstall172(void) {
                 }));
             }
         }
-        if (hooked) [fxTraceClasses172 addObject:@(raw)];
+        // Never wrap a class twice, even if it only declares jitter setters.
+        if (hooked || touched) [fxTraceClasses172 addObject:@(raw)];
         free(methods);
     }
     free(classes);
@@ -388,15 +391,21 @@ static NSDictionary *updateMetalFX172(NSString *requested, int frameCount) {
     if (managedField) lightGet(camera, managedField, &nativePath);
     state[@"cppRenderPath"] = @(nativePath);
     state[@"native"] = fxNativeState172();
-    // Rescan for the scaler classes until the game has created its scaler.
+    // New images can introduce scaler classes after the first scan.
     static double nextScan;
+    static uint32_t scannedImages;
     double now = NSProcessInfo.processInfo.systemUptime;
     NSDictionary *nativeState=state[@"native"];
     NSUInteger encodes = [nativeState[@"encodes"] unsignedIntegerValue];
     NSDictionary *lastEncode=nativeState[@"lastEncode"];
     BOOL encoding = encodes && lastEncode && now - [lastEncode[@"time"] doubleValue] < 2 &&
         [lastEncode[@"spatial"] boolValue]==spatial && [lastEncode[@"generation"] isEqual:nativeState[@"generation"]];
-    if (now >= nextScan) { fxTraceInstall172(); nextScan = now + 4; }
+    uint32_t images = _dyld_image_count();
+    if (now >= nextScan && images != scannedImages) {
+        fxTraceInstall172();
+        scannedImages = images;
+        nextScan = now + 4;
+    }
     state[@"encodes"] = @(encodes);
     if (lastEncode) state[@"lastEncode"] = lastEncode;
     id encodedOutput = lastEncode[@"output"];

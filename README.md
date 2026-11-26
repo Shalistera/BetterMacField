@@ -1,12 +1,12 @@
 # BetterMacField
 
-**0.6.0 · macOS launcher and graphics/input integration for Arknights: Endfield**
+**0.6.1 · macOS launcher and graphics/input integration for Arknights: Endfield**
 
 [English](#english) · [简体中文](#简体中文)
 
 ## English
 
-BetterMacField adds native keyboard/mouse input and graphics controls to the **global and China (Hypergryph) iOS 1.7.2 clients** of **Arknights: Endfield**, running through PlayCover on Apple Silicon Macs. Version 0.6.0 adds the China client and a simpler launcher: four pages (Quality, Character, Controls, Advanced), Smooth / Recommended / Ultra quality presets, settings that save and apply immediately, and an in-game menu with the same layout.
+BetterMacField adds native keyboard/mouse input and graphics controls to the **global and China (Hypergryph) iOS 1.7.2 clients** of **Arknights: Endfield**, running through PlayCover on Apple Silicon Macs. Version 0.6.1 fixes a MetalFX class scan that could cause a brief frame drop about every four seconds. Graphics and input settings are unchanged from 0.6.0.
 
 **Both regions require their verified iOS 1.7.2 / build 0. CN support has been checked offline only and has not yet been verified in game.** The previous 1.6.3 runtime and resource package have been retired. Other client versions require their own adaptation.
 
@@ -64,7 +64,7 @@ The launcher and integration source use [MIT](LICENSE). Game-derived rendering p
 
 ## 简体中文
 
-BetterMacField 为通过 PlayCover 运行的《明日方舟：终末地》**国际服及国服 iOS 1.7.2** 补充 macOS 原生键鼠和画面控制。**0.6.0** 接入国服，并简化启动器：画质／角色／操作／高级四页，流畅／推荐／极致画质预设，设置改动立即保存并应用，游戏内菜单使用同样的分区。
+BetterMacField 为通过 PlayCover 运行的《明日方舟：终末地》**国际服及国服 iOS 1.7.2** 补充 macOS 原生键鼠和画面控制。**0.6.1** 修复了 MetalFX 类扫描可能引起的周期性掉帧（约每 4 秒一次），画质和操作设置与 0.6.0 相同。
 
 **两区均须使用对应的 iOS 1.7.2 / build 0。国服适配仅做离线核对，尚未进游戏验证。** 已移除 1.6.3 兼容运行库与旧资源包；其他版本需要单独适配。
 

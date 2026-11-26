@@ -11,8 +11,8 @@ import bettermacfield as bmf
 import prepare_graphics172
 
 
-VERSION = '0.6.0'
-BUILD_NUMBER = '11'
+VERSION = '0.6.1'
+BUILD_NUMBER = '12'
 
 
 def build_current(resources, include_assets=True):

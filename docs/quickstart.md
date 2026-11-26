@@ -1,4 +1,4 @@
-# BetterMacField 0.6.0 使用说明
+# BetterMacField 0.6.1 使用说明
 
 适配国际服和国服 iOS 1.7.2 / build 0。国服尚未进游戏验证，不要使用 1.6.3 客户端。
 
